@@ -168,15 +168,7 @@ public class FlutterAudioToolkitPlugin: NSObject, FlutterPlugin {
         try audioSession.setActive(true)
     }
     
-    /// Helper function to convert FourCharCode to String
-    func fourCharCodeToString(_ code: FourCharCode) -> String {
-        let bytes = withUnsafeBytes(of: code.bigEndian) { Data($0) }
-        if let string = String(data: bytes, encoding: .utf8) {
-            return string.trimmingCharacters(in: .controlCharacters)
-        }
-        return String(format: "0x%08X", code)
-    }
-    
+   
     /// Chooses the best export preset based on bitrate and sample rate
     func chooseExportPreset(bitRate: Int, sampleRate: Int) -> String {
         // Choose preset based on desired quality
