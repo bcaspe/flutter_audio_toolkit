@@ -283,27 +283,8 @@ public class FlutterAudioToolkitPlugin: NSObject, FlutterPlugin {
         
         finalExportSession.outputURL = outputURL
         
-        // Always use M4A for best compatibility unless format is "copy"
-        if format.lowercased() == "copy" {
-            // Try to determine original format
-            let pathExtension = inputURL.pathExtension.lowercased()
-            switch pathExtension {
-            case "m4a":
-                finalExportSession.outputFileType = .m4a
-            case "mp3":
-                // MP3 output not directly supported by AVAssetExportSession, use M4A
-                finalExportSession.outputFileType = .m4a
-            case "wav":
-                // WAV output not directly supported by AVAssetExportSession, use M4A
-                finalExportSession.outputFileType = .m4a
-            default:
-                // Default to M4A for any unknown format
-                finalExportSession.outputFileType = .m4a
-            }
-        } else {
-            // Default to M4A for all other formats
-            finalExportSession.outputFileType = .m4a
-        }
+        // Configure output file type safely
+        try configureOutputFileType(for: finalExportSession, format: format, outputURL: outputURL)
         
         // Add metadata to ensure proper playback
         finalExportSession.metadata = createMetadata(for: inputURL)
@@ -428,8 +409,8 @@ public class FlutterAudioToolkitPlugin: NSObject, FlutterPlugin {
         
         finalExportSession.outputURL = outputURL
         
-        // Always use M4A for best compatibility in trimming operations
-        finalExportSession.outputFileType = .m4a
+        // Configure output file type safely
+        try configureOutputFileType(for: finalExportSession, format: "m4a", outputURL: outputURL)
         
         // Add metadata to ensure proper playback
         finalExportSession.metadata = createMetadata(for: inputURL)
@@ -566,7 +547,9 @@ public class FlutterAudioToolkitPlugin: NSObject, FlutterPlugin {
         }
         
         finalExportSession.outputURL = outputURL
-        finalExportSession.outputFileType = .m4a
+        
+        // Configure output file type safely
+        try configureOutputFileType(for: finalExportSession, format: "copy", outputURL: outputURL)
         
         // Add metadata to ensure proper playback
         finalExportSession.metadata = createMetadata(for: inputURL)
@@ -904,5 +887,82 @@ private extension FlutterAudioToolkitPlugin {
             return string.trimmingCharacters(in: .controlCharacters)
         }
         return String(format: "0x%08X", code)
+    }
+    
+    /// Helper function to safely configure output file type for AVAssetExportSession
+    private func configureOutputFileType(for exportSession: AVAssetExportSession, format: String, outputURL: URL) throws {
+        // Determine the appropriate output file type based on format and file extension
+        let outputFileExtension = outputURL.pathExtension.lowercased()
+        let requestedFormat = format.lowercased()
+        
+        var preferredFileType: AVFileType
+        
+        // Determine preferred file type based on format request and file extension
+        if requestedFormat == "copy" {
+            // For copy operations, try to maintain original format where possible
+            switch outputFileExtension {
+            case "m4a", "aac":
+                preferredFileType = AVFileType.m4a
+            case "mp4":
+                preferredFileType = AVFileType.mp4
+            case "caf":
+                preferredFileType = AVFileType.caf
+            case "wav", "wave":
+                preferredFileType = AVFileType.wav
+            case "aiff", "aif":
+                preferredFileType = AVFileType.aiff
+            default:
+                preferredFileType = AVFileType.m4a // Default to M4A for audio
+            }
+        } else {
+            // For format conversions, choose based on requested format
+            switch requestedFormat {
+            case "m4a", "aac":
+                preferredFileType = AVFileType.m4a
+            case "mp4":
+                preferredFileType = AVFileType.mp4
+            case "wav":
+                preferredFileType = AVFileType.wav
+            case "caf":
+                preferredFileType = AVFileType.caf
+            case "aiff":
+                preferredFileType = AVFileType.aiff
+            default:
+                preferredFileType = AVFileType.m4a // Default to M4A for audio
+            }
+        }
+        
+        // Check if the preferred file type is supported by the export session
+        if exportSession.supportedFileTypes.contains(preferredFileType) {
+            exportSession.outputFileType = preferredFileType
+            return
+        }
+        
+        // Fallback logic if preferred type is not supported
+        let fallbackTypes: [AVFileType] = [
+            AVFileType.m4a,
+            AVFileType.mp4,
+            AVFileType.caf,
+            AVFileType.wav,
+            AVFileType.aiff
+        ]
+        
+        for fallbackType in fallbackTypes {
+            if exportSession.supportedFileTypes.contains(fallbackType) {
+                exportSession.outputFileType = fallbackType
+                print("Warning: Preferred file type \(preferredFileType) not supported, using \(fallbackType)")
+                return
+            }
+        }
+        
+        // Last resort: use the first supported type
+        if let firstSupported = exportSession.supportedFileTypes.first {
+            exportSession.outputFileType = firstSupported
+            print("Warning: Using first available file type: \(firstSupported)")
+        } else {
+            throw NSError(domain: "AudioConverter", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "No supported output file types available for export session"
+            ])
+        }
     }
 }
