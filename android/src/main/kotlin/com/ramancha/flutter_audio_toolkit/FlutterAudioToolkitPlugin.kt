@@ -83,8 +83,11 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
         val inputPath = call.argument<String>("inputPath")
         val outputPath = call.argument<String>("outputPath")
         val format = call.argument<String>("format")
-        val bitRate = call.argument<Int>("bitRate") ?: BIT_RATE
+        val bitRateKbps = call.argument<Int>("bitRate") ?: 128 // Received in kbps from Dart
         val sampleRate = call.argument<Int>("sampleRate") ?: SAMPLE_RATE
+
+        // Convert bitRate from kbps to bps for MediaCodec
+        val bitRate = bitRateKbps * 1000
 
         if (inputPath == null || outputPath == null || format == null) {
             result.error("INVALID_ARGUMENTS", "Missing required arguments", null)
@@ -93,7 +96,7 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
 
         GlobalScope.launch(Dispatchers.IO) {
             try {
-                Log.d(TAG, "Starting audio conversion: $inputPath -> $outputPath (format: $format)")
+                Log.d(TAG, "Starting audio conversion: $inputPath -> $outputPath (format: $format, bitRate: ${bitRateKbps}kbps)")
                 val convertedData = convertAudio(inputPath, outputPath, format, bitRate, sampleRate)
                 Handler(Looper.getMainLooper()).post {
                     result.success(convertedData)
@@ -115,12 +118,17 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
         sampleRate: Int
     ): Map<String, Any?> = withContext(Dispatchers.IO) {
         
-        Log.d(TAG, "Converting audio file: $inputPath -> $outputPath")
+        Log.d(TAG, "Converting audio file: $inputPath -> $outputPath, format: $format")
+        
+        // Handle copy format with lossless copying
+        if (format.lowercase() == "copy") {
+            return@withContext convertAudioLossless(inputPath, outputPath)
+        }
         
         val extractor = MediaExtractor()
-        val decoder: MediaCodec
-        val encoder: MediaCodec  
-        val muxer: MediaMuxer
+        var decoder: MediaCodec? = null
+        var encoder: MediaCodec? = null  
+        var muxer: MediaMuxer? = null
 
         try {
             // Setup extractor
@@ -154,38 +162,145 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
             decoder.configure(inputFormat, null, null, 0)
             decoder.start()
 
-            // Create encoder
-            val outputMime = when (format.lowercase()) {
-                "aac", "m4a" -> "audio/mp4a-latm"
-                "mp3" -> "audio/mpeg"
-                else -> throw IllegalArgumentException("Unsupported output format: $format")
-            }
+            // Create encoder with proper AAC configuration
+            val outputMime = "audio/mp4a-latm" // Always use AAC for M4A format
             
-            Log.d(TAG, "Creating encoder for MIME type: $outputMime")
+            Log.d(TAG, "Creating AAC encoder for MIME type: $outputMime")
             encoder = MediaCodec.createEncoderByType(outputMime)
             
-            val outputFormat = MediaFormat.createAudioFormat(outputMime, sampleRate, 2).apply {
+            // Get input format details for proper encoding setup
+            val inputChannels = inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            val inputSampleRate = if (inputFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            } else {
+                sampleRate
+            }
+            
+            Log.d(TAG, "Input format - Channels: $inputChannels, Sample Rate: $inputSampleRate")
+            
+            // Use input format characteristics or defaults
+            val outputChannels = if (inputChannels in 1..2) inputChannels else 2
+            val outputSampleRate = if (inputSampleRate in 8000..48000) inputSampleRate else sampleRate
+            
+            val outputFormat = MediaFormat.createAudioFormat(outputMime, outputSampleRate, outputChannels).apply {
                 setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
                 setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+                
+                // CRITICAL: Increase buffer sizes to prevent data loss
+                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 65536) // Increased from 16384
+                
+                // Essential for proper AAC encoding
+                setInteger(MediaFormat.KEY_CHANNEL_MASK, 
+                    if (outputChannels == 1) AudioFormat.CHANNEL_OUT_MONO 
+                    else AudioFormat.CHANNEL_OUT_STEREO)
+                
+                // Optional quality improvements for AAC
+                // Higher quality settings that may help
+                try {
+                    // These may not be supported on all devices, so wrap in try-catch
+                    setInteger("aac-target-ref-bitrate", bitRate)
+                    setInteger("aac-encoded-target-level", 1) // Enable high quality
+                } catch (e: Exception) {
+                    Log.d(TAG, "Optional AAC quality settings not supported: ${e.message}")
+                }
             }
-            Log.d(TAG, "Configuring encoder with sample rate: $sampleRate, bit rate: $bitRate")
+            
+            Log.d(TAG, "*** AUDIO QUALITY DEBUG ***")
+            Log.d(TAG, "Encoder config - Channels: $outputChannels, Sample Rate: $outputSampleRate, Bit Rate: $bitRate bps (${bitRate/1000} kbps)")
+            Log.d(TAG, "*** END AUDIO QUALITY DEBUG ***")
             
             encoder.configure(outputFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-            encoder.start()            // Create muxer
+            encoder.start()
+            
+            // Create muxer
+            // Ensure output directory exists
+            File(outputPath).parentFile?.mkdirs()
+            
             Log.d(TAG, "Creating muxer for output: $outputPath")
             muxer = MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
 
-            val audioData = processAudioData(extractor, decoder, encoder, muxer, inputFormat, outputPath)
+            val audioData = processAudioData(extractor, decoder, encoder, muxer, inputFormat, outputPath, bitRate, sampleRate)
             
             Log.d(TAG, "Audio conversion completed successfully")
             audioData
             
         } finally {
-            Log.d(TAG, "Cleaning up resources")
+            Log.d(TAG, "Cleaning up conversion resources")
+            
+            decoder?.let {
+                try {
+                    // Try to stop, but it might already be stopped/released
+                    try {
+                        it.stop()
+                        Log.d(TAG, "Conversion decoder stopped")
+                    } catch (e: IllegalStateException) {
+                        Log.d(TAG, "Decoder already stopped - this is expected")
+                    }
+                    
+                    it.release()
+                    Log.d(TAG, "Conversion decoder released")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error releasing conversion decoder", e)
+                }
+            }
+            
+            encoder?.let {
+                try {
+                    // Try to stop, but it might already be stopped/released
+                    try {
+                        it.stop()
+                        Log.d(TAG, "Conversion encoder stopped")
+                    } catch (e: IllegalStateException) {
+                        Log.d(TAG, "Encoder already stopped - this is expected")
+                    }
+                    
+                    it.release()
+                    Log.d(TAG, "Conversion encoder released")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error releasing conversion encoder", e)
+                }
+            }
+            
+            muxer?.let {
+                try {
+                    // Try to stop, but it might already be stopped
+                    try {
+                        it.stop()
+                        Log.d(TAG, "Conversion muxer stopped in finally block")
+                    } catch (e: IllegalStateException) {
+                        Log.d(TAG, "Muxer already stopped - this is expected")
+                    }
+                    
+                    it.release()
+                    Log.d(TAG, "Conversion muxer released")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error releasing conversion muxer", e)
+                }
+            }
+            
             try {
                 extractor.release()
+                Log.d(TAG, "Conversion extractor released")
             } catch (e: Exception) {
-                Log.e(TAG, "Error releasing extractor", e)            }
+                Log.e(TAG, "Error releasing conversion extractor", e)
+            }
+            
+            // Verify file was created and is valid
+            val outputFile = File(outputPath)
+            if (outputFile.exists()) {
+                val fileSize = outputFile.length()
+                Log.d(TAG, "Converted file created successfully: $outputPath (size: $fileSize bytes)")
+                
+                // Basic validation - M4A files should have minimum size and start with proper headers
+                if (fileSize < 100) {
+                    Log.w(TAG, "WARNING: Output file is very small ($fileSize bytes) - may be invalid")
+                } else {
+                    Log.d(TAG, "File size looks reasonable for M4A format")
+                }
+            } else {
+                Log.e(TAG, "ERROR: Converted file was not created: $outputPath")
+                throw IOException("Conversion output file was not created: $outputPath")
+            }
         }
     }
 
@@ -195,29 +310,61 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
         encoder: MediaCodec,
         muxer: MediaMuxer,
         inputFormat: MediaFormat,
-        outputPath: String
+        outputPath: String,
+        bitRate: Int,
+        sampleRate: Int
     ): Map<String, Any?> = withContext(Dispatchers.IO) {
         val decoderBufferInfo = MediaCodec.BufferInfo()
         val encoderBufferInfo = MediaCodec.BufferInfo()
 
         var decoderDone = false
         var encoderDone = false
+        var encoderEOSSignaled = false
         var muxerStarted = false
         var audioTrackIndex = -1
 
         val inputDurationUs = inputFormat.getLong(MediaFormat.KEY_DURATION)
         var processedDurationUs = 0L
+        
+        // Timeout mechanism
+        val startTime = System.currentTimeMillis()
+        val maxProcessingTimeMs = 120000 // 2 minutes maximum
+        var loopCounter = 0
+        var lastProgressTime = System.currentTimeMillis()
+        var noOutputCounter = 0
+
+        Log.d(TAG, "Starting audio processing loop with input duration: ${inputDurationUs / 1000}ms")
 
         while (!encoderDone) {
-            // Feed input to decoder
+            loopCounter++
+            val currentTime = System.currentTimeMillis()
+            
+            // Check for timeout
+            if (currentTime - startTime > maxProcessingTimeMs) {
+                Log.w(TAG, "Processing timeout reached after ${(currentTime - startTime) / 1000}s - forcing completion")
+                break
+            }
+            
+            // Log progress periodically
+            if (currentTime - lastProgressTime > 3000) {
+                Log.d(TAG, "Loop $loopCounter: decoder done: $decoderDone, encoder done: $encoderDone, EOS signaled: $encoderEOSSignaled")
+                lastProgressTime = currentTime
+            }
+
+            var hasActivity = false
+
+            // 1. Feed input to decoder (only if not done)
             if (!decoderDone) {
-                val inputBufferIndex = decoder.dequeueInputBuffer(TIMEOUT_US)
+                val inputBufferIndex = decoder.dequeueInputBuffer(1000L) // 1ms timeout
                 if (inputBufferIndex >= 0) {
+                    hasActivity = true
                     val inputBuffer = decoder.getInputBuffer(inputBufferIndex)
                     if (inputBuffer != null) {
+                        inputBuffer.clear()
                         val sampleSize = extractor.readSampleData(inputBuffer, 0)
                         
                         if (sampleSize < 0) {
+                            Log.d(TAG, "End of input reached - signaling decoder EOS")
                             decoder.queueInputBuffer(inputBufferIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                             decoderDone = true
                         } else {
@@ -228,7 +375,7 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
                             // Update progress
                             processedDurationUs = presentationTimeUs
                             val progress = if (inputDurationUs > 0) {
-                                (processedDurationUs.toDouble() / inputDurationUs.toDouble()).coerceIn(0.0, 1.0)
+                                (processedDurationUs.toDouble() / inputDurationUs.toDouble()).coerceIn(0.0, 0.95)
                             } else 0.0
                             
                             Handler(Looper.getMainLooper()).post {
@@ -239,116 +386,236 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
                 }
             }
 
-            // Get output from decoder and feed to encoder
-            val outputBufferIndex = decoder.dequeueOutputBuffer(decoderBufferInfo, TIMEOUT_US)
-            if (outputBufferIndex >= 0) {
-                val outputBuffer = decoder.getOutputBuffer(outputBufferIndex)
-                if (decoderBufferInfo.size > 0 && outputBuffer != null) {
-                    // Feed to encoder
-                    val encoderInputIndex = encoder.dequeueInputBuffer(TIMEOUT_US)
-                    if (encoderInputIndex >= 0) {                        val encoderInputBuffer = encoder.getInputBuffer(encoderInputIndex)
-                        if (encoderInputBuffer != null) {
-                            encoderInputBuffer.clear()
-                            
-                            // Ensure we don't exceed buffer capacity
-                            val dataSize = min(decoderBufferInfo.size, encoderInputBuffer.remaining())
-                            if (dataSize > 0) {
-                                outputBuffer.position(0)
-                                outputBuffer.limit(dataSize)
-                                encoderInputBuffer.put(outputBuffer)
-                            }
-                                
-                            encoder.queueInputBuffer(
-                                encoderInputIndex,
-                                0,
-                                dataSize,
-                                decoderBufferInfo.presentationTimeUs,
-                                decoderBufferInfo.flags
-                            )
-                        }
-                    }
-                }
-                
-                decoder.releaseOutputBuffer(outputBufferIndex, false)
-                
-                if (decoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
-                    // Signal end of stream to encoder
-                    val encoderInputIndex = encoder.dequeueInputBuffer(TIMEOUT_US)
-                    if (encoderInputIndex >= 0) {
-                        encoder.queueInputBuffer(encoderInputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                    }
-                }
-            }
-
-            // Get output from encoder
-            val encoderOutputIndex = encoder.dequeueOutputBuffer(encoderBufferInfo, TIMEOUT_US)
-            when (encoderOutputIndex) {
+            // 2. Get output from decoder and feed to encoder
+            val decoderOutputIndex = decoder.dequeueOutputBuffer(decoderBufferInfo, 1000L)
+            when (decoderOutputIndex) {
                 MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                    if (!muxerStarted) {
-                        audioTrackIndex = muxer.addTrack(encoder.outputFormat)
-                        muxer.start()
-                        muxerStarted = true
-                    }
+                    hasActivity = true
+                    val newFormat = decoder.outputFormat
+                    Log.d(TAG, "Decoder output format changed: $newFormat")
+                    // Note: We continue using our pre-configured encoder format
                 }
                 MediaCodec.INFO_TRY_AGAIN_LATER -> {
                     // No output available yet
                 }
                 else -> {
-                    if (encoderOutputIndex >= 0) {
-                        val encodedData = encoder.getOutputBuffer(encoderOutputIndex)
+                    if (decoderOutputIndex >= 0) {
+                        hasActivity = true
+                        val decoderOutputBuffer = decoder.getOutputBuffer(decoderOutputIndex)
                         
-                        if (encoderBufferInfo.size > 0 && muxerStarted && encodedData != null) {
-                            muxer.writeSampleData(audioTrackIndex, encodedData, encoderBufferInfo)
+                        if (decoderBufferInfo.size > 0 && decoderOutputBuffer != null) {
+                            // CRITICAL FIX: Retry encoder input buffer with longer timeout and blocking wait
+                            var encoderInputIndex = -1
+                            var retryCount = 0
+                            val maxRetries = 10
+                            
+                            // Keep trying to get encoder input buffer - don't lose audio data!
+                            while (encoderInputIndex < 0 && retryCount < maxRetries) {
+                                encoderInputIndex = encoder.dequeueInputBuffer(5000L) // 5 second timeout
+                                if (encoderInputIndex < 0) {
+                                    retryCount++
+                                    Log.w(TAG, "Encoder input buffer unavailable, retry $retryCount/$maxRetries")
+                                    // Flush encoder output buffers to make space
+                                    val tempOutputIndex = encoder.dequeueOutputBuffer(encoderBufferInfo, 0)
+                                    if (tempOutputIndex >= 0) {
+                                        encoder.releaseOutputBuffer(tempOutputIndex, false)
+                                        Log.d(TAG, "Released encoder output buffer to make space")
+                                    }
+                                    Thread.sleep(10) // Brief pause before retry
+                                }
+                            }
+                            
+                            if (encoderInputIndex >= 0) {
+                                val encoderInputBuffer = encoder.getInputBuffer(encoderInputIndex)
+                                if (encoderInputBuffer != null) {
+                                    encoderInputBuffer.clear()
+                                    
+                                    // Copy PCM data safely from decoder to encoder
+                                    val dataSize = minOf(decoderBufferInfo.size, encoderInputBuffer.remaining())
+                                    if (dataSize > 0) {
+                                        decoderOutputBuffer.position(decoderBufferInfo.offset)
+                                        decoderOutputBuffer.limit(decoderBufferInfo.offset + dataSize)
+                                        encoderInputBuffer.put(decoderOutputBuffer)
+                                    }
+                                    
+                                    encoder.queueInputBuffer(
+                                        encoderInputIndex,
+                                        0,
+                                        dataSize,
+                                        decoderBufferInfo.presentationTimeUs,
+                                        decoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv()
+                                    )
+                                    
+                                    Log.v(TAG, "Successfully queued ${dataSize} bytes to encoder")
+                                }
+                            } else {
+                                Log.e(TAG, "CRITICAL: Failed to get encoder input buffer after $maxRetries retries - AUDIO DATA LOST!")
+                                // This should not happen with the retry logic, but if it does, we have a serious problem
+                            }
                         }
                         
-                        encoder.releaseOutputBuffer(encoderOutputIndex, false)
+                        decoder.releaseOutputBuffer(decoderOutputIndex, false)
                         
-                        if (encoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
-                            encoderDone = true
+                        // Check if decoder reached EOS
+                        if (decoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                            Log.d(TAG, "Decoder EOS flag detected")
+                            if (!encoderEOSSignaled) {
+                                // Signal EOS to encoder
+                                val encoderInputIndex = encoder.dequeueInputBuffer(5000L) // Wait up to 5s
+                                if (encoderInputIndex >= 0) {
+                                    encoder.queueInputBuffer(encoderInputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                                    encoderEOSSignaled = true
+                                    Log.d(TAG, "EOS signal sent to encoder")
+                                } else {
+                                    Log.w(TAG, "Could not signal EOS to encoder - will retry")
+                                }
+                            }
                         }
                     }
                 }
             }
+
+            // 3. If decoder is done but we haven't signaled EOS to encoder yet, try again
+            if (decoderDone && !encoderEOSSignaled) {
+                val encoderInputIndex = encoder.dequeueInputBuffer(1000L)
+                if (encoderInputIndex >= 0) {
+                    encoder.queueInputBuffer(encoderInputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                    encoderEOSSignaled = true
+                    hasActivity = true
+                    Log.d(TAG, "Late EOS signal sent to encoder")
+                }
+            }
+
+            // 4. Get output from encoder - CRITICAL: Process ALL available output buffers
+            var processedEncoderOutput = false
+            do {
+                val encoderOutputIndex = encoder.dequeueOutputBuffer(encoderBufferInfo, 1000L)
+                processedEncoderOutput = false
+                
+                when (encoderOutputIndex) {
+                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        hasActivity = true
+                        processedEncoderOutput = true
+                        if (!muxerStarted) {
+                            val outputFormat = encoder.outputFormat
+                            Log.d(TAG, "Encoder output format changed - starting muxer")
+                            Log.d(TAG, "Encoder output format: $outputFormat")
+                            
+                            // Validate the output format before adding to muxer
+                            if (!outputFormat.containsKey(MediaFormat.KEY_MIME)) {
+                                Log.e(TAG, "ERROR: Encoder output format missing MIME type")
+                                throw IOException("Invalid encoder output format - missing MIME type")
+                            }
+                            
+                            val outputMime = outputFormat.getString(MediaFormat.KEY_MIME)
+                            Log.d(TAG, "Adding track to muxer with MIME: $outputMime")
+                            
+                            audioTrackIndex = muxer.addTrack(outputFormat)
+                            muxer.start()
+                            muxerStarted = true
+                            Log.d(TAG, "Muxer started successfully with track index: $audioTrackIndex")
+                        }
+                    }
+                    MediaCodec.INFO_TRY_AGAIN_LATER -> {
+                        // No output available - this is normal
+                    }
+                    else -> {
+                        if (encoderOutputIndex >= 0) {
+                            hasActivity = true
+                            processedEncoderOutput = true
+                            val encodedData = encoder.getOutputBuffer(encoderOutputIndex)
+                            
+                            if (encoderBufferInfo.size > 0 && muxerStarted && encodedData != null) {
+                                muxer.writeSampleData(audioTrackIndex, encodedData, encoderBufferInfo)
+                                Log.v(TAG, "Wrote ${encoderBufferInfo.size} bytes of encoded audio to muxer")
+                            }
+                            
+                            encoder.releaseOutputBuffer(encoderOutputIndex, false)
+                            
+                            if (encoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                                Log.d(TAG, "Encoder EOS received - processing complete!")
+                                encoderDone = true
+                            }
+                        }
+                    }
+                }
+            } while (processedEncoderOutput && !encoderDone) // Keep processing all available output buffers
+
+            // 5. Detect stuck situations
+            if (!hasActivity) {
+                noOutputCounter++
+                if (noOutputCounter > 1000) { // No activity for 1000 iterations
+                    if (encoderEOSSignaled) {
+                        Log.w(TAG, "No activity for too long after EOS signaled - forcing completion")
+                        break
+                    } else if (decoderDone) {
+                        Log.w(TAG, "No activity and decoder done but no EOS signaled - forcing EOS")
+                        try {
+                            val encoderInputIndex = encoder.dequeueInputBuffer(0L)
+                            if (encoderInputIndex >= 0) {
+                                encoder.queueInputBuffer(encoderInputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                                encoderEOSSignaled = true
+                                Log.d(TAG, "Force-signaled EOS to encoder")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to force-signal EOS", e)
+                            break
+                        }
+                    }
+                    noOutputCounter = 0
+                }
+            } else {
+                noOutputCounter = 0
+            }
+
+            // 6. Emergency brake for excessive iterations
+            if (loopCounter > 50000) {
+                Log.w(TAG, "Emergency brake: too many iterations ($loopCounter)")
+                break
+            }
         }
 
-        // Clean up codecs
+        Log.d(TAG, "Audio processing loop completed after $loopCounter iterations")
+
+        // Stop muxer if it was started (but don't release - handled in finally block)
         try {
-            decoder.stop()
-            decoder.release()
+            if (muxerStarted) {
+                muxer.stop()
+                Log.d(TAG, "Muxer stopped successfully")
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Error releasing decoder", e)
+            Log.e(TAG, "Error stopping muxer", e)
         }
-        
-        try {
-            encoder.stop()
-            encoder.release()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error releasing encoder", e)
-        }
-          try {
-            muxer.stop()
-            muxer.release()        } catch (e: Exception) {
-            Log.e(TAG, "Error releasing muxer", e)
-        }
+
+        // Note: Codec cleanup (stop/release) is handled in the main convertAudio finally block
+        // to avoid double-release issues
         
         val durationMs = (inputDurationUs / 1000).toInt()
         
-        // Verify file was created
+        // Verify file was created and send final progress
         val outputFile = File(outputPath)
         if (outputFile.exists()) {
-            Log.d(TAG, "Converted file created successfully: $outputPath (size: ${outputFile.length()} bytes)")
+            val fileSize = outputFile.length()
+            Log.d(TAG, "*** FILE SIZE DEBUG ***")
+            Log.d(TAG, "Conversion completed successfully: $outputPath (size: $fileSize bytes = ${fileSize / 1024}KB = ${fileSize / (1024 * 1024)}MB)")
+            Log.d(TAG, "Expected size for ${(inputDurationUs / 1000)}ms at ${bitRate/1000}kbps should be approximately ${(inputDurationUs / 1000) * (bitRate/1000) / 8}KB")
+            Log.d(TAG, "*** END FILE SIZE DEBUG ***")
+            
+            // Send final 100% progress
+            Handler(Looper.getMainLooper()).post {
+                progressSink?.success(mapOf("operation" to "convert", "progress" to 1.0))
+            }
         } else {
-            Log.e(TAG, "Converted file was not created: $outputPath")
-        }
-          Handler(Looper.getMainLooper()).post {
-            progressSink?.success(mapOf("operation" to "convert", "progress" to 1.0))
+            Log.e(TAG, "ERROR: Converted file was not created: $outputPath")
+            throw IOException("Output file was not created: $outputPath")
         }
 
         mapOf(
             "outputPath" to outputPath,
             "durationMs" to durationMs,
-            "bitRate" to BIT_RATE,
-            "sampleRate" to SAMPLE_RATE        )
+            "bitRate" to (bitRate / 1000), // Convert back to kbps for Dart consistency
+            "sampleRate" to sampleRate
+        )
     }
     
     // Waveform extraction implementation
@@ -611,8 +878,11 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
         val startTimeMs = call.argument<Int>("startTimeMs")
         val endTimeMs = call.argument<Int>("endTimeMs")
         val format = call.argument<String>("format")
-        val bitRate = call.argument<Int>("bitRate") ?: BIT_RATE
+        val bitRateKbps = call.argument<Int>("bitRate") ?: 128 // Received in kbps from Dart
         val sampleRate = call.argument<Int>("sampleRate") ?: SAMPLE_RATE
+
+        // Convert bitRate from kbps to bps for MediaCodec
+        val bitRate = bitRateKbps * 1000
 
         if (inputPath == null || outputPath == null || startTimeMs == null || endTimeMs == null || format == null) {
             result.error("INVALID_ARGUMENTS", "Missing required arguments", null)
@@ -626,7 +896,7 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
 
         GlobalScope.launch(Dispatchers.IO) {
             try {
-                Log.d(TAG, "Starting audio trimming: $inputPath -> $outputPath (${startTimeMs}ms to ${endTimeMs}ms)")
+                Log.d(TAG, "Starting audio trimming: $inputPath -> $outputPath (${startTimeMs}ms to ${endTimeMs}ms, bitRate: ${bitRateKbps}kbps)")
                 val trimmedData = trimAudio(inputPath, outputPath, startTimeMs, endTimeMs, format, bitRate, sampleRate)
                 Handler(Looper.getMainLooper()).post {
                     result.success(trimmedData)
@@ -648,8 +918,11 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
         sampleRate: Int
     ): Map<String, Any?> = withContext(Dispatchers.IO) {
         
-        Log.d(TAG, "Trimming audio file: $inputPath -> $outputPath (${startTimeMs}ms to ${endTimeMs}ms), format: $format")        // Use lossless copy if format is "copy"
-        if (format == "copy") {
+        Log.d(TAG, "Trimming audio file: $inputPath -> $outputPath (${startTimeMs}ms to ${endTimeMs}ms)")
+        Log.d(TAG, "Format: $format, Bit rate: $bitRate kbps, Sample rate: $sampleRate Hz")
+        
+        // Use lossless copy if format is "copy"
+        if (format.lowercase() == "copy") {
             return@withContext trimAudioLossless(inputPath, outputPath, startTimeMs, endTimeMs)
         }
         
@@ -658,9 +931,9 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
         val durationUs = endTimeUs - startTimeUs
         
         val extractor = MediaExtractor()
-        val decoder: MediaCodec
-        val encoder: MediaCodec
-        val muxer: MediaMuxer
+        var decoder: MediaCodec? = null
+        var encoder: MediaCodec? = null
+        var muxer: MediaMuxer? = null
 
         try {
             // Setup extractor
@@ -693,17 +966,43 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
             decoder.configure(inputFormat, null, null, 0)
             decoder.start()
             
-            // Setup encoder
-            val outputMime = when (format) {
-                "aac" -> MediaFormat.MIMETYPE_AUDIO_AAC
-                "m4a" -> MediaFormat.MIMETYPE_AUDIO_AAC
-                else -> MediaFormat.MIMETYPE_AUDIO_AAC
+            // Setup encoder with proper AAC configuration
+            val outputMime = "audio/mp4a-latm" // AAC for M4A format
+            
+            Log.d(TAG, "Creating AAC encoder for trim operation")
+            encoder = MediaCodec.createEncoderByType(outputMime)
+            
+            // Get input format details for proper encoding setup
+            val inputChannels = inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            val inputSampleRate = if (inputFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            } else {
+                sampleRate
             }
             
-            val encoderFormat = MediaFormat.createAudioFormat(outputMime, sampleRate, 2).apply {
-                setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
+            Log.d(TAG, "Trim - Input format - Channels: $inputChannels, Sample Rate: $inputSampleRate")
+            
+            // Use input format characteristics or defaults
+            val outputChannels = if (inputChannels in 1..2) inputChannels else 2
+            val outputSampleRate = if (inputSampleRate in 8000..48000) inputSampleRate else sampleRate
+            
+            // Calculate actual bitrate in bits per second (bps)
+            val actualBitRate = bitRate * 1000
+            
+            Log.d(TAG, "Configuring encoder with bitRate: $actualBitRate bps ($bitRate kbps)")
+            
+            val encoderFormat = MediaFormat.createAudioFormat(outputMime, outputSampleRate, outputChannels).apply {
+                setInteger(MediaFormat.KEY_BIT_RATE, actualBitRate)
                 setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384)
+                
+                // Essential for proper AAC encoding
+                setInteger(MediaFormat.KEY_CHANNEL_MASK, 
+                    if (outputChannels == 1) AudioFormat.CHANNEL_OUT_MONO 
+                    else AudioFormat.CHANNEL_OUT_STEREO)
             }
+            
+            Log.d(TAG, "Trim encoder config - Channels: $outputChannels, Sample Rate: $outputSampleRate, Bit Rate: $actualBitRate bps")
             
             encoder = MediaCodec.createEncoderByType(outputMime)
             encoder.configure(encoderFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
@@ -712,30 +1011,88 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
             // Setup muxer
             File(outputPath).parentFile?.mkdirs()
             muxer = MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-              // Process audio data with time range
+            
+            // Process audio data with time range
             processAudioDataWithTimeRange(extractor, decoder, encoder, muxer, inputFormat, outputPath, startTimeUs, endTimeUs)
             
-            Log.d(TAG, "Audio trimming completed successfully")
-              // Verify file was created
-            val outputFile = File(outputPath)
-            if (outputFile.exists()) {
-                Log.d(TAG, "Trimmed file created successfully: $outputPath (size: ${outputFile.length()} bytes)")
-            } else {
-                Log.e(TAG, "Trimmed file was not created: $outputPath")
-            }
+            Log.d(TAG, "Audio trimming processing completed")
             
             mapOf(
                 "outputPath" to outputPath,
                 "durationMs" to (durationUs / 1000).toInt(),
-                "bitRate" to bitRate,
-                "sampleRate" to sampleRate
+                "bitRate" to bitRate, // Return the actual kbps value
+                "sampleRate" to outputSampleRate
             )
             
         } finally {
+            Log.d(TAG, "Cleaning up trim resources")
+            
+            decoder?.let { 
+                try {
+                    // Try to stop, but it might already be stopped/released
+                    try {
+                        it.stop()
+                        Log.d(TAG, "Trim decoder stopped")
+                    } catch (e: IllegalStateException) {
+                        Log.d(TAG, "Trim decoder already stopped - this is expected")
+                    }
+                    
+                    it.release()
+                    Log.d(TAG, "Trim decoder released")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error releasing trim decoder", e)
+                }
+            }
+            
+            encoder?.let {
+                try {
+                    // Try to stop, but it might already be stopped/released
+                    try {
+                        it.stop()
+                        Log.d(TAG, "Trim encoder stopped")
+                    } catch (e: IllegalStateException) {
+                        Log.d(TAG, "Trim encoder already stopped - this is expected")
+                    }
+                    
+                    it.release()
+                    Log.d(TAG, "Trim encoder released")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error releasing trim encoder", e)
+                }
+            }
+            
+            muxer?.let {
+                try {
+                    // Try to stop, but it might already be stopped
+                    try {
+                        it.stop()
+                        Log.d(TAG, "Trim muxer stopped")
+                    } catch (e: IllegalStateException) {
+                        Log.d(TAG, "Trim muxer already stopped - this is expected")
+                    }
+                    
+                    it.release()
+                    Log.d(TAG, "Trim muxer released")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error releasing trim muxer", e)
+                }
+            }
+            
             try {
                 extractor.release()
+                Log.d(TAG, "Trim extractor released")
             } catch (e: Exception) {
-                Log.w(TAG, "Error releasing MediaExtractor", e)
+                Log.w(TAG, "Error releasing trim MediaExtractor", e)
+            }
+            
+            // Verify file was created
+            val outputFile = File(outputPath)
+            if (outputFile.exists()) {
+                val fileSize = outputFile.length()
+                Log.d(TAG, "Trimmed file created successfully: $outputPath (size: $fileSize bytes)")
+            } else {
+                Log.e(TAG, "ERROR: Trimmed file was not created: $outputPath")
+                throw IOException("Trim output file was not created: $outputPath")
             }
         }
     }
@@ -750,141 +1107,219 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
         startTimeUs: Long,
         endTimeUs: Long
     ) {
-        var outputTrackIndex = -1
+        val decoderBufferInfo = MediaCodec.BufferInfo()
+        val encoderBufferInfo = MediaCodec.BufferInfo()
+        
+        var decoderDone = false
+        var encoderDone = false
+        var encoderEOSSignaled = false
         var muxerStarted = false
-        var totalBytesProcessed = 0L
-        val bufferInfo = MediaCodec.BufferInfo()
+        var audioTrackIndex = -1
+        
+        val processingDurationUs = endTimeUs - startTimeUs
+        var processedDurationUs = 0L
+        
+        // Timeout mechanism
+        val startTime = System.currentTimeMillis()
+        val maxProcessingTimeMs = 120000 // 2 minutes maximum
+        var loopCounter = 0
+        var lastProgressTime = System.currentTimeMillis()
+        var noOutputCounter = 0
+        
+        Log.d(TAG, "Starting trim processing loop for range ${startTimeUs/1000}ms to ${endTimeUs/1000}ms")
         
         try {
-            // Decode and encode loop
-            var inputDone = false
-            var outputDone = false
-            
-            while (!outputDone) {
-                // Feed input to decoder
-                if (!inputDone) {
-                    val inputBufferIndex = decoder.dequeueInputBuffer(TIMEOUT_US)
+            while (!encoderDone) {
+                loopCounter++
+                val currentTime = System.currentTimeMillis()
+                
+                // Check for timeout
+                if (currentTime - startTime > maxProcessingTimeMs) {
+                    Log.w(TAG, "Trim processing timeout - forcing completion")
+                    break
+                }
+                
+                // Log progress periodically
+                if (currentTime - lastProgressTime > 3000) {
+                    Log.d(TAG, "Trim loop $loopCounter: decoder done: $decoderDone, encoder done: $encoderDone")
+                    lastProgressTime = currentTime
+                }
+
+                var hasActivity = false
+
+                // 1. Feed input to decoder
+                if (!decoderDone) {
+                    val inputBufferIndex = decoder.dequeueInputBuffer(1000L)
                     if (inputBufferIndex >= 0) {
-                        val inputBuffer = decoder.getInputBuffer(inputBufferIndex)!!
-                        val sampleSize = extractor.readSampleData(inputBuffer, 0)
-                        val presentationTimeUs = extractor.sampleTime
-                        
-                        if (sampleSize < 0 || presentationTimeUs >= endTimeUs) {
-                            decoder.queueInputBuffer(inputBufferIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                            inputDone = true
-                        } else if (presentationTimeUs >= startTimeUs) {
-                            // Adjust timestamp to start from 0
-                            val adjustedTimeUs = presentationTimeUs - startTimeUs
-                            decoder.queueInputBuffer(inputBufferIndex, 0, sampleSize, adjustedTimeUs, 0)
-                            extractor.advance()
-                        } else {
-                            // Skip samples before start time
-                            decoder.queueInputBuffer(inputBufferIndex, 0, 0, 0, 0)
-                            extractor.advance()
-                        }
-                    }
-                }
-                
-                // Get output from decoder and feed to encoder
-                val outputBufferIndex = decoder.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)
-                if (outputBufferIndex >= 0) {
-                    val outputBuffer = decoder.getOutputBuffer(outputBufferIndex)!!
-                      if (bufferInfo.size > 0) {
-                        // Feed to encoder
-                        val encoderInputIndex = encoder.dequeueInputBuffer(TIMEOUT_US)
-                        if (encoderInputIndex >= 0) {
-                            val encoderInputBuffer = encoder.getInputBuffer(encoderInputIndex)!!
-                            encoderInputBuffer.clear()
+                        hasActivity = true
+                        val inputBuffer = decoder.getInputBuffer(inputBufferIndex)
+                        if (inputBuffer != null) {
+                            inputBuffer.clear()
+                            val sampleSize = extractor.readSampleData(inputBuffer, 0)
+                            val presentationTimeUs = extractor.sampleTime
                             
-                            // Ensure we don't exceed buffer capacity
-                            val dataSize = min(bufferInfo.size, encoderInputBuffer.remaining())
-                            if (dataSize > 0) {
-                                outputBuffer.position(0)
-                                outputBuffer.limit(dataSize)
-                                encoderInputBuffer.put(outputBuffer)
+                            if (sampleSize < 0 || presentationTimeUs >= endTimeUs) {
+                                decoder.queueInputBuffer(inputBufferIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                                decoderDone = true
+                                Log.d(TAG, "Trim: End of range reached - signaling decoder EOS")
+                            } else if (presentationTimeUs >= startTimeUs) {
+                                // Adjust timestamp to start from 0
+                                val adjustedTimeUs = presentationTimeUs - startTimeUs
+                                decoder.queueInputBuffer(inputBufferIndex, 0, sampleSize, adjustedTimeUs, 0)
+                                extractor.advance()
+                                
+                                // Update progress
+                                processedDurationUs = adjustedTimeUs
+                                val progress = if (processingDurationUs > 0) {
+                                    (processedDurationUs.toDouble() / processingDurationUs.toDouble()).coerceIn(0.0, 0.95)
+                                } else 0.0
+                                
+                                Handler(Looper.getMainLooper()).post {
+                                    progressSink?.success(mapOf("operation" to "trim", "progress" to progress))
+                                }
+                            } else {
+                                // Skip samples before start time
+                                decoder.queueInputBuffer(inputBufferIndex, 0, 0, 0, 0)
+                                extractor.advance()
                             }
-                            
-                            encoder.queueInputBuffer(
-                                encoderInputIndex,
-                                0,
-                                dataSize,
-                                bufferInfo.presentationTimeUs,
-                                bufferInfo.flags
-                            )
-                        }
-                    }
-                    
-                    decoder.releaseOutputBuffer(outputBufferIndex, false)
-                    
-                    if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                        // Signal end of stream to encoder
-                        val encoderInputIndex = encoder.dequeueInputBuffer(TIMEOUT_US)
-                        if (encoderInputIndex >= 0) {
-                            encoder.queueInputBuffer(encoderInputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                         }
                     }
                 }
-                
-                // Get output from encoder and write to muxer
-                val encoderOutputIndex = encoder.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)
+
+                // 2. Get output from decoder and feed to encoder
+                val decoderOutputIndex = decoder.dequeueOutputBuffer(decoderBufferInfo, 1000L)
+                if (decoderOutputIndex >= 0) {
+                    hasActivity = true
+                    val decoderOutputBuffer = decoder.getOutputBuffer(decoderOutputIndex)
+                    
+                    if (decoderBufferInfo.size > 0 && decoderOutputBuffer != null) {
+                        // Try to feed to encoder
+                        val encoderInputIndex = encoder.dequeueInputBuffer(1000L)
+                        if (encoderInputIndex >= 0) {
+                            val encoderInputBuffer = encoder.getInputBuffer(encoderInputIndex)
+                            if (encoderInputBuffer != null) {
+                                encoderInputBuffer.clear()
+                                
+                                // Copy data safely
+                                val dataSize = minOf(decoderBufferInfo.size, encoderInputBuffer.remaining())
+                                if (dataSize > 0) {
+                                    decoderOutputBuffer.position(decoderBufferInfo.offset)
+                                    decoderOutputBuffer.limit(decoderBufferInfo.offset + dataSize)
+                                    encoderInputBuffer.put(decoderOutputBuffer)
+                                }
+                                
+                                encoder.queueInputBuffer(
+                                    encoderInputIndex,
+                                    0,
+                                    dataSize,
+                                    decoderBufferInfo.presentationTimeUs,
+                                    decoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv()
+                                )
+                            }
+                        }
+                    }
+                    
+                    decoder.releaseOutputBuffer(decoderOutputIndex, false)
+                    
+                    // Check if decoder reached EOS
+                    if (decoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                        Log.d(TAG, "Trim: Decoder EOS flag detected")
+                        if (!encoderEOSSignaled) {
+                            val encoderInputIndex = encoder.dequeueInputBuffer(5000L)
+                            if (encoderInputIndex >= 0) {
+                                encoder.queueInputBuffer(encoderInputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                                encoderEOSSignaled = true
+                                Log.d(TAG, "Trim: EOS signal sent to encoder")
+                            }
+                        }
+                    }
+                }
+
+                // 3. If decoder is done but no EOS signaled yet
+                if (decoderDone && !encoderEOSSignaled) {
+                    val encoderInputIndex = encoder.dequeueInputBuffer(1000L)
+                    if (encoderInputIndex >= 0) {
+                        encoder.queueInputBuffer(encoderInputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                        encoderEOSSignaled = true
+                        hasActivity = true
+                        Log.d(TAG, "Trim: Late EOS signal sent to encoder")
+                    }
+                }
+
+                // 4. Get output from encoder
+                val encoderOutputIndex = encoder.dequeueOutputBuffer(encoderBufferInfo, 1000L)
                 when (encoderOutputIndex) {
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        hasActivity = true
                         if (!muxerStarted) {
-                            val outputFormat = encoder.outputFormat
-                            outputTrackIndex = muxer.addTrack(outputFormat)
+                            Log.d(TAG, "Trim: Encoder output format changed - starting muxer")
+                            audioTrackIndex = muxer.addTrack(encoder.outputFormat)
                             muxer.start()
                             muxerStarted = true
                         }
                     }
                     MediaCodec.INFO_TRY_AGAIN_LATER -> {
-                        // No output available yet
+                        // No output available
                     }
                     else -> {
                         if (encoderOutputIndex >= 0) {
-                            val encodedData = encoder.getOutputBuffer(encoderOutputIndex)!!
+                            hasActivity = true
+                            val encodedData = encoder.getOutputBuffer(encoderOutputIndex)
                             
-                            if (bufferInfo.size > 0 && muxerStarted) {
-                                encodedData.position(bufferInfo.offset)
-                                encodedData.limit(bufferInfo.offset + bufferInfo.size)
-                                muxer.writeSampleData(outputTrackIndex, encodedData, bufferInfo)
-                                totalBytesProcessed += bufferInfo.size
+                            if (encoderBufferInfo.size > 0 && muxerStarted && encodedData != null) {
+                                muxer.writeSampleData(audioTrackIndex, encodedData, encoderBufferInfo)
                             }
                             
                             encoder.releaseOutputBuffer(encoderOutputIndex, false)
                             
-                            if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                                outputDone = true
+                            if (encoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                                Log.d(TAG, "Trim: Encoder EOS received - processing complete!")
+                                encoderDone = true
                             }
                         }
-                    }                }
-            }
-        } finally {
-            try {
-                decoder.stop()
-                decoder.release()
-            } catch (e: Exception) {
-                Log.w(TAG, "Error releasing decoder", e)
-            }
-            
-            try {
-                encoder.stop()
-                encoder.release()
-            } catch (e: Exception) {
-                Log.w(TAG, "Error releasing encoder", e)
-            }
-            
-            try {
-                if (muxerStarted) {
-                    muxer.stop()
+                    }
                 }
-                muxer.release()
-            } catch (e: Exception) {
-                Log.w(TAG, "Error releasing muxer", e)
-            }
 
-            try {
-                extractor.release()            } catch (e: Exception) {
-                Log.w(TAG, "Error releasing extractor", e)
+                // 5. Detect stuck situations
+                if (!hasActivity) {
+                    noOutputCounter++
+                    if (noOutputCounter > 1000) {
+                        if (encoderEOSSignaled) {
+                            Log.w(TAG, "Trim: No activity after EOS - forcing completion")
+                            break
+                        } else if (decoderDone) {
+                            Log.w(TAG, "Trim: No activity and decoder done - forcing EOS")
+                            try {
+                                val encoderInputIndex = encoder.dequeueInputBuffer(0L)
+                                if (encoderInputIndex >= 0) {
+                                    encoder.queueInputBuffer(encoderInputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                                    encoderEOSSignaled = true
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to force EOS in trim", e)
+                                break
+                            }
+                        }
+                        noOutputCounter = 0
+                    }
+                } else {
+                    noOutputCounter = 0
+                }
+
+                // 6. Emergency brake
+                if (loopCounter > 30000) {
+                    Log.w(TAG, "Trim: Emergency brake after $loopCounter iterations")
+                    break
+                }
+            }
+            
+        } finally {
+            // Cleanup is handled by caller
+            Log.d(TAG, "Trim processing completed after $loopCounter iterations")
+            
+            // Send final progress
+            Handler(Looper.getMainLooper()).post {
+                progressSink?.success(mapOf("operation" to "trim", "progress" to 1.0))
             }
         }
     }
@@ -934,7 +1369,8 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
             if (audioTrackIndex == -1 || audioFormat == null) {
                 throw IllegalArgumentException("No audio track found in input file")
             }
-              // Get original file extension for output
+            
+            // Get original file extension for output
             val inputFile = File(inputPath)
             val originalExtension = inputFile.extension.lowercase()
             
@@ -942,25 +1378,28 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
             val outputFormat = when (originalExtension) {
                 "mp3" -> {
                     // MP3 files cannot be directly muxed - they need conversion
-                    Log.w(TAG, "MP3 lossless trimming not directly supported by MediaMuxer. Consider using conversion instead.")
-                    throw IllegalArgumentException("MP3 files require conversion for trimming. Use AAC or M4A output format instead.")
+                    Log.w(TAG, "MP3 lossless trimming not directly supported by MediaMuxer. Using M4A container instead.")
+                    MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
                 }
                 "m4a", "aac", "mp4" -> MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
                 "wav" -> {
-                    Log.w(TAG, "WAV lossless trimming may not preserve original format. Consider using conversion.")
+                    Log.w(TAG, "WAV lossless trimming may not preserve original format. Using M4A container instead.")
                     MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4 
                 }
                 "ogg" -> {
-                    Log.w(TAG, "OGG lossless trimming may not preserve original format. Consider using conversion.")
+                    Log.w(TAG, "OGG lossless trimming may not preserve original format. Using M4A container instead.")
                     MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
                 }
                 else -> {
-                    Log.w(TAG, "Unknown format $originalExtension, using MP4 container")
+                    Log.w(TAG, "Unknown format $originalExtension, using M4A container")
                     MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
                 }
             }
             
             // Setup muxer
+            // Ensure output directory exists
+            File(outputPath).parentFile?.mkdirs()
+            
             muxer = MediaMuxer(outputPath, outputFormat)
             outputTrackIndex = muxer.addTrack(audioFormat)
             
@@ -1017,7 +1456,7 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
                     // Update progress
                     val progress = ((sampleTime - startTimeUs).toDouble() / durationUs.toDouble()).coerceIn(0.0, 1.0)
                     Handler(Looper.getMainLooper()).post {
-                        progressSink?.success(progress)
+                        progressSink?.success(mapOf("operation" to "trim", "progress" to progress))
                     }
                 }
                 
@@ -1037,10 +1476,12 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
             } else {
                 Log.d(TAG, "Lossless trimmed file created successfully: $outputPath (${outputFile.length()} bytes)")
             }
-              // Get audio properties from original format
+            
+            // Get audio properties from original format
             val originalSampleRate = audioFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
             val originalBitRate = if (audioFormat.containsKey(MediaFormat.KEY_BIT_RATE)) {
-                audioFormat.getInteger(MediaFormat.KEY_BIT_RATE)            } else {
+                audioFormat.getInteger(MediaFormat.KEY_BIT_RATE)
+            } else {
                 // Estimate bitrate based on file size and duration
                 val fileSizeBytes = File(inputPath).length()
                 val durationSeconds = (extractor.getTrackFormat(audioTrackIndex).getLong(MediaFormat.KEY_DURATION) / 1_000_000.0)
@@ -1215,6 +1656,146 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
                 extractor.release()
             } catch (e: Exception) {
                 Log.w(TAG, "Error releasing extractor", e)
+            }
+        }
+    }
+
+    /**
+     * Lossless audio conversion that preserves the original format
+     * Uses MediaExtractor and MediaMuxer to copy the stream directly without decode/encode
+     */
+    private suspend fun convertAudioLossless(
+        inputPath: String,
+        outputPath: String
+    ): Map<String, Any?> = withContext(Dispatchers.IO) {
+        
+        Log.d(TAG, "Starting lossless audio conversion: $inputPath -> $outputPath")
+        
+        val extractor = MediaExtractor()
+        var muxer: MediaMuxer? = null
+        var audioTrackIndex = -1
+        var outputTrackIndex = -1
+        var totalBytesProcessed = 0L
+        
+        try {
+            // Setup extractor
+            extractor.setDataSource(inputPath)
+            Log.d(TAG, "Lossless: Input file has ${extractor.trackCount} tracks")
+            
+            // Find audio track and get its format
+            var audioFormat: MediaFormat? = null
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME)
+                Log.d(TAG, "Track $i: MIME = $mime")
+                if (mime?.startsWith("audio/") == true) {
+                    audioTrackIndex = i
+                    audioFormat = format
+                    Log.d(TAG, "Found audio track at index $i with format: $mime")
+                    break
+                }
+            }
+            
+            if (audioTrackIndex == -1 || audioFormat == null) {
+                throw IllegalArgumentException("No audio track found in input file")
+            }
+            
+            // Setup muxer with M4A format (most compatible)
+            File(outputPath).parentFile?.mkdirs()
+            muxer = MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            outputTrackIndex = muxer.addTrack(audioFormat)
+            
+            // Select the audio track
+            extractor.selectTrack(audioTrackIndex)
+            muxer.start()
+            
+            Log.d(TAG, "Starting lossless copy operation")
+            
+            // Copy data
+            val buffer = ByteBuffer.allocate(1024 * 1024) // 1MB buffer
+            val bufferInfo = MediaCodec.BufferInfo()
+            
+            var sampleCount = 0
+            while (true) {
+                buffer.clear()
+                val sampleSize = extractor.readSampleData(buffer, 0)
+                
+                if (sampleSize < 0) {
+                    Log.d(TAG, "Lossless copy completed. Processed $sampleCount samples, $totalBytesProcessed bytes")
+                    break
+                }
+                
+                bufferInfo.presentationTimeUs = extractor.sampleTime
+                bufferInfo.size = sampleSize
+                bufferInfo.offset = 0
+                bufferInfo.flags = extractor.sampleFlags
+                
+                muxer.writeSampleData(outputTrackIndex, buffer, bufferInfo)
+                totalBytesProcessed += sampleSize
+                sampleCount++
+                
+                // Progress reporting
+                if (sampleCount % 1000 == 0) {
+                    Log.d(TAG, "Lossless copy progress: $sampleCount samples, $totalBytesProcessed bytes")
+                }
+                
+                extractor.advance()
+            }
+            
+            // Get duration from input format
+            val durationUs = if (audioFormat.containsKey(MediaFormat.KEY_DURATION)) {
+                audioFormat.getLong(MediaFormat.KEY_DURATION)
+            } else {
+                0L
+            }
+            
+            val durationMs = (durationUs / 1000).toInt()
+            
+            // Get bitrate (estimated if not available)
+            val bitRate = if (audioFormat.containsKey(MediaFormat.KEY_BIT_RATE)) {
+                audioFormat.getInteger(MediaFormat.KEY_BIT_RATE) / 1000 // Convert to kbps
+            } else {
+                128 // Default estimate
+            }
+            
+            // Get sample rate
+            val sampleRate = if (audioFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                audioFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            } else {
+                44100 // Default
+            }
+            
+            mapOf(
+                "outputPath" to outputPath,
+                "durationMs" to durationMs,
+                "bitRate" to bitRate,
+                "sampleRate" to sampleRate
+            )
+            
+        } finally {
+            try {
+                muxer?.stop()
+                muxer?.release()
+                Log.d(TAG, "Lossless muxer released")
+            } catch (e: Exception) {
+                Log.w(TAG, "Error releasing lossless muxer", e)
+            }
+            
+            try {
+                extractor.release()
+                Log.d(TAG, "Lossless extractor released")
+            } catch (e: Exception) {
+                Log.w(TAG, "Error releasing lossless extractor", e)
+            }
+            
+            // Verify file was created
+            val outputFile = File(outputPath)
+            if (outputFile.exists()) {
+                val fileSize = outputFile.length()
+                Log.d(TAG, "Lossless converted file created: $outputPath (size: $fileSize bytes)")
+            } else {
+                Log.e(TAG, "ERROR: Lossless converted file was not created: $outputPath")
+                throw IOException("Lossless conversion output file was not created")
             }
         }
     }

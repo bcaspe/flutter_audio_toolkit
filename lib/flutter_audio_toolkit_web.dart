@@ -51,17 +51,17 @@ class FlutterAudioToolkitWeb extends FlutterAudioToolkitPlatform {
       onProgress?.call(0.2);
 
       // Get basic audio info first to estimate duration
-      Map<String, dynamic>? audioInfo;
+      AudioInfo? audioInfo;
       try {
         audioInfo = await getAudioInfo(inputPath);
       } catch (e) {
         // If we can't get audio info, use default duration
-        audioInfo = {'duration': 30000}; // 30 seconds default
+        audioInfo = null;
       }
 
       onProgress?.call(0.5);
 
-      final duration = audioInfo['duration'] as int;
+      final duration = audioInfo?.durationMs ?? 30000; // 30 seconds default
       final totalSamples = (duration * samplesPerSecond / 1000).round();
       final amplitudes = <double>[];
 
@@ -80,19 +80,13 @@ class FlutterAudioToolkitWeb extends FlutterAudioToolkitPlatform {
         // Add envelope for natural audio characteristics
         final envelope = _calculateEnvelope(timeRatio);
 
-        final amplitude = ((wave1 + wave2 + wave3 + noise) * envelope + 0.5)
-            .clamp(0.0, 1.0);
+        final amplitude = ((wave1 + wave2 + wave3 + noise) * envelope + 0.5).clamp(0.0, 1.0);
         amplitudes.add(amplitude);
       }
 
       onProgress?.call(1.0);
 
-      return WaveformData(
-        amplitudes: amplitudes,
-        durationMs: duration,
-        sampleRate: 44100,
-        channels: 2,
-      );
+      return WaveformData(amplitudes: amplitudes, durationMs: duration, sampleRate: 44100, channels: 2);
     } catch (e) {
       throw Exception('Failed to extract waveform on web: $e');
     }
@@ -131,29 +125,39 @@ class FlutterAudioToolkitWeb extends FlutterAudioToolkitPlatform {
   }
 
   @override
-  Future<Map<String, dynamic>> getAudioInfo(String inputPath) async {
+  Future<AudioInfo> getAudioInfo(String inputPath) async {
     try {
       // For web, we can get basic info using HTML Audio element
       final audio = web.HTMLAudioElement();
-      final completer = Completer<Map<String, dynamic>>();
+      final completer = Completer<AudioInfo>();
 
       void onLoadedMetadata() {
-        final info = <String, dynamic>{
-          'duration':
-              (audio.duration * 1000).round(), // Convert to milliseconds
-          'format': inputPath.split('.').last.toLowerCase(),
-          'channels': 2, // HTML Audio API doesn't expose channel count
-          'sampleRate': 44100, // Default assumption for web
-          'bitRate': 128, // Default assumption
-          'fileSize': 0, // Not available from HTML Audio API
-          'platform': 'web',
-          'supported': true,
-        };
-        completer.complete(info);
+        final durationMs = (audio.duration * 1000).round();
+        final format = inputPath.split('.').last.toLowerCase();
+
+        final audioInfo = AudioInfo(
+          isValid: true,
+          durationMs: durationMs,
+          format: format,
+          mimeType: _getMimeTypeFromExtension(format),
+          channels: 2, // HTML Audio API doesn't expose channel count
+          sampleRate: 44100, // Default assumption for web
+          bitRate: 128, // Default assumption
+          supportedForConversion: false, // Not supported on web
+          supportedForTrimming: false, // Not supported on web
+          supportedForWaveform: true, // We can generate fake waveforms
+        );
+
+        completer.complete(audioInfo);
       }
 
       void onError() {
-        completer.completeError('Failed to load audio file');
+        final audioInfo = AudioInfo(
+          isValid: false,
+          error: 'Failed to load audio file',
+          details: 'Web platform could not load the audio file at: $inputPath',
+        );
+        completer.complete(audioInfo);
       }
 
       // Set up event listeners
@@ -166,10 +170,15 @@ class FlutterAudioToolkitWeb extends FlutterAudioToolkitPlatform {
 
       return await completer.future.timeout(
         const Duration(seconds: 10),
-        onTimeout: () => throw TimeoutException('Audio loading timed out'),
+        onTimeout:
+            () => AudioInfo(
+              isValid: false,
+              error: 'Audio loading timed out',
+              details: 'Failed to load audio information within 10 seconds',
+            ),
       );
     } catch (e) {
-      throw Exception('Failed to get audio info on web: $e');
+      return AudioInfo(isValid: false, error: 'Failed to get audio info on web', details: e.toString());
     }
   }
 
@@ -193,6 +202,27 @@ class FlutterAudioToolkitWeb extends FlutterAudioToolkitPlatform {
   }
 
   // Helper methods
+
+  /// Maps audio file extensions to their MIME types
+  String _getMimeTypeFromExtension(String extension) {
+    switch (extension.toLowerCase()) {
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+        return 'audio/wav';
+      case 'ogg':
+        return 'audio/ogg';
+      case 'webm':
+        return 'audio/webm';
+      case 'm4a':
+      case 'aac':
+        return 'audio/mp4';
+      case 'flac':
+        return 'audio/flac';
+      default:
+        return 'audio/unknown';
+    }
+  }
 
   /// Calculates an envelope for natural audio amplitude variations
   double _calculateEnvelope(double timeRatio) {

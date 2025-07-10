@@ -92,11 +92,11 @@ if (audioInfo['isValid'] == true) {
 Convert audio files between different formats with customizable quality settings:
 
 ```dart
-// Convert MP3 to AAC with custom settings
+// Convert MP3 to M4A with custom settings
 final result = await audioToolkit.convertAudio(
   inputPath: '/path/to/input.mp3',
-  outputPath: '/path/to/output.aac',
-  format: AudioFormat.aac,
+  outputPath: '/path/to/output.m4a',
+  format: AudioFormat.m4a,
   bitRate: 128,      // Quality: 128kbps
   sampleRate: 44100, // Standard sample rate
   onProgress: (progress) {
@@ -130,10 +130,10 @@ final losslessResult = await audioToolkit.trimAudio(
 // Lossy trimming with format conversion
 final lossyResult = await audioToolkit.trimAudio(
   inputPath: '/path/to/input.mp3',
-  outputPath: '/path/to/trimmed.aac',
+  outputPath: '/path/to/trimmed.m4a',
   startTimeMs: 5000,   // Start at 5 seconds
   endTimeMs: 25000,    // End at 25 seconds
-  format: AudioFormat.aac,
+  format: AudioFormat.m4a,
   bitRate: 192,        // Higher quality
   sampleRate: 48000,   // Higher sample rate
   onProgress: (progress) {
@@ -296,7 +296,7 @@ Future<ConversionResult> convertAudio({
 **Parameters**:
 - `inputPath`: Source audio file path (MP3, WAV, OGG, M4A, AAC)
 - `outputPath`: Destination file path
-- `format`: Target format (`AudioFormat.aac` or `AudioFormat.m4a`)
+- `format`: Target format (`AudioFormat.m4a` - AAC codec in M4A container for universal compatibility)
 - `bitRate`: Quality in kbps (32-320, default: 128)
 - `sampleRate`: Sample rate in Hz (8000-192000, default: 44100)
 - `onProgress`: Optional progress callback (0.0-1.0)
@@ -322,7 +322,7 @@ Future<ConversionResult> trimAudio({
 - `outputPath`: Destination file path
 - `startTimeMs`: Start time in milliseconds
 - `endTimeMs`: End time in milliseconds
-- `format`: Output format (`AudioFormat.aac`, `AudioFormat.m4a`, or `AudioFormat.copy` for lossless)
+- `format`: Output format (`AudioFormat.m4a` - AAC codec in M4A container, or `AudioFormat.copy` for lossless)
 - `bitRate`: Quality for lossy formats (ignored for lossless)
 - `sampleRate`: Sample rate for lossy formats (ignored for lossless)
 - `onProgress`: Optional progress callback (0.0-1.0)

@@ -1,17 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/services.dart';
-import '../models/audio_player_config.dart';
-import '../models/audio_player_state.dart';
-import '../models/waveform_pattern.dart';
-import '../core/audio_service.dart';
 import '../generators/waveform_generator.dart';
+import 'package:flutter_audio_toolkit/flutter_audio_toolkit.dart';
 
 /// Service for audio playback with waveform visualization
 class AudioPlayerService {
-  static const MethodChannel _channel = MethodChannel(
-    'flutter_audio_toolkit/player',
-  );
+  static const MethodChannel _channel = MethodChannel('flutter_audio_toolkit/player');
 
   /// Currently active player instances
   static final Map<String, AudioPlayerService> _instances = {};
@@ -97,8 +92,7 @@ class AudioPlayerService {
       stateManager.clearError();
 
       // Check if it's a URL or local file
-      bool isUrl =
-          audioPath.startsWith('http://') || audioPath.startsWith('https://');
+      bool isUrl = audioPath.startsWith('http://') || audioPath.startsWith('https://');
 
       int actualDurationMs;
 
@@ -125,16 +119,13 @@ class AudioPlayerService {
 
         // Get the actual audio duration from audio metadata
         try {
-          final audioInfo = await AudioService.getAudioInfo(audioPath);
-          actualDurationMs =
-              audioInfo['durationMs'] ?? audioInfo['duration'] ?? 30000;
+          final toolkit = FlutterAudioToolkit();
+          final audioInfo = await toolkit.getAudioInfo(audioPath);
+          actualDurationMs = audioInfo.durationMs ?? 30000;
         } catch (e) {
           // Fallback to file size estimate with a more reasonable range
           final fileStat = await file.stat();
-          actualDurationMs =
-              (fileStat.size / 1000)
-                  .clamp(10000, 3600000)
-                  .toInt(); // 10s to 60min based on file size
+          actualDurationMs = (fileStat.size / 1000).clamp(10000, 3600000).toInt(); // 10s to 60min based on file size
         }
       }
 
@@ -163,10 +154,8 @@ class AudioPlayerService {
 
     try {
       // Extract real waveform data
-      final waveformData = await AudioService.extractWaveform(
-        inputPath: audioPath,
-        samplesPerSecond: 100,
-      );
+      final toolkit = FlutterAudioToolkit();
+      final waveformData = await toolkit.extractWaveform(inputPath: audioPath, samplesPerSecond: 100);
 
       stateManager.setWaveformData(waveformData);
     } catch (e) {
@@ -262,10 +251,7 @@ class AudioPlayerService {
     try {
       // Mock implementation - simulate seek
       final clampedPosition = Duration(
-        milliseconds: position.inMilliseconds.clamp(
-          0,
-          stateManager.duration.inMilliseconds,
-        ),
+        milliseconds: position.inMilliseconds.clamp(0, stateManager.duration.inMilliseconds),
       );
       stateManager.updatePosition(clampedPosition);
     } catch (e) {
@@ -326,10 +312,7 @@ class AudioPlayerService {
   /// Starts the position update timer
   void _startPositionTimer() {
     _stopPositionTimer();
-    _positionTimer = Timer.periodic(
-      const Duration(milliseconds: 100),
-      (_) => _updatePosition(),
-    );
+    _positionTimer = Timer.periodic(const Duration(milliseconds: 100), (_) => _updatePosition());
   }
 
   /// Stops the position update timer
@@ -348,8 +331,7 @@ class AudioPlayerService {
       final duration = stateManager.duration;
 
       if (duration.inMilliseconds > 0) {
-        final newPositionMs =
-            currentPosition.inMilliseconds + 100; // Advance by 100ms
+        final newPositionMs = currentPosition.inMilliseconds + 100; // Advance by 100ms
 
         if (newPositionMs >= duration.inMilliseconds) {
           // Reached end of track

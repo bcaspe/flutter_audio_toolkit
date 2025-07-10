@@ -15,10 +15,17 @@ class AppState extends ChangeNotifier {
   bool _isConverting = false;
   bool _isExtracting = false;
   bool _isTrimming = false;
-  Map<String, dynamic>? _audioInfo;
+  AudioInfo? _audioInfo;
   int _trimStartMs = 0;
   int _trimEndMs = 0;
-  AudioFormat _selectedTrimFormat = AudioFormat.copy;
+  // Using M4A format for best compatibility
+  final AudioFormat trimFormat = AudioFormat.m4a;
+  final int trimBitRate = 320; // Higher bitrate for better audio clarity
+
+  // New properties for enhanced conversion options
+  AudioFormat _selectedConversionFormat = AudioFormat.m4a;
+  int _selectedBitRate = 192; // Default to high quality
+  String? _currentPlayingFile;
 
   // Fake waveform generation state
   WaveformPattern _selectedWaveformPattern = WaveformPattern.music;
@@ -46,10 +53,9 @@ class AppState extends ChangeNotifier {
   bool get isConverting => _isConverting;
   bool get isExtracting => _isExtracting;
   bool get isTrimming => _isTrimming;
-  Map<String, dynamic>? get audioInfo => _audioInfo;
+  AudioInfo? get audioInfo => _audioInfo;
   int get trimStartMs => _trimStartMs;
   int get trimEndMs => _trimEndMs;
-  AudioFormat get selectedTrimFormat => _selectedTrimFormat;
   WaveformPattern get selectedWaveformPattern => _selectedWaveformPattern;
   bool get isFakeWaveformMode => _isFakeWaveformMode;
   TextEditingController get urlController => _urlController;
@@ -58,6 +64,11 @@ class AppState extends ChangeNotifier {
   NoiseDetectionResult? get noiseAnalysisResult => _noiseAnalysisResult;
   bool get isAnalyzingNoise => _isAnalyzingNoise;
   double get noiseAnalysisProgress => _noiseAnalysisProgress;
+
+  // New getters for enhanced conversion options
+  AudioFormat get selectedConversionFormat => _selectedConversionFormat;
+  int get selectedBitRate => _selectedBitRate;
+  String? get currentPlayingFile => _currentPlayingFile;
 
   // Setters with notification
   set platformVersion(String value) {
@@ -115,7 +126,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  set audioInfo(Map<String, dynamic>? value) {
+  set audioInfo(AudioInfo? value) {
     _audioInfo = value;
     notifyListeners();
   }
@@ -130,8 +141,19 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  set selectedTrimFormat(AudioFormat value) {
-    _selectedTrimFormat = value;
+  // New setters for enhanced conversion options
+  set selectedConversionFormat(AudioFormat value) {
+    _selectedConversionFormat = value;
+    notifyListeners();
+  }
+
+  set selectedBitRate(int value) {
+    _selectedBitRate = value;
+    notifyListeners();
+  }
+
+  set currentPlayingFile(String? value) {
+    _currentPlayingFile = value;
     notifyListeners();
   }
 
@@ -180,6 +202,7 @@ class AppState extends ChangeNotifier {
     _trimEndMs = 0;
     _isFakeWaveformMode = false;
     _noiseAnalysisResult = null;
+    _currentPlayingFile = null;
     notifyListeners();
   }
 

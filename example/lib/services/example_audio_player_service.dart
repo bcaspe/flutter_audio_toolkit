@@ -117,7 +117,7 @@ class ExampleAudioPlayerService {
       }
 
       // Load audio
-      await _audioPlayer.setSourceDeviceFile(audioPath);
+      await _audioPlayer.setSource(DeviceFileSource(audioPath));
 
       _audioPath = audioPath;
       _state = AudioPlayerState.stopped;
@@ -149,13 +149,10 @@ class ExampleAudioPlayerService {
     try {
       // Extract real waveform data in background
       final toolkit = FlutterAudioToolkit();
-      final waveformData = await toolkit.extractWaveform(
-        inputPath: audioPath,
-        samplesPerSecond: 100,
-      );
+      final waveformData = await toolkit.extractWaveform(inputPath: audioPath, samplesPerSecond: 100);
       _waveformData = waveformData;
     } catch (e) {
-      //'Warning: Failed to extract waveform data: $e');
+      // Failed to extract waveform data
     }
   }
 
@@ -172,13 +169,12 @@ class ExampleAudioPlayerService {
       final toolkit = FlutterAudioToolkit();
       final fakeWaveform = toolkit.generateFakeWaveform(
         pattern: pattern,
-        durationMs:
-            _duration.inMilliseconds > 0 ? _duration.inMilliseconds : 180000,
+        durationMs: _duration.inMilliseconds > 0 ? _duration.inMilliseconds : 180000,
         samplesPerSecond: samplesPerSecond,
       );
       _waveformData = fakeWaveform;
     } catch (e) {
-      //'Warning: Failed to generate fake waveform: $e');
+      // Failed to generate fake waveform
     }
   }
 
@@ -187,7 +183,7 @@ class ExampleAudioPlayerService {
     if (_isDisposed) throw StateError('Player has been disposed');
 
     try {
-      await _audioPlayer.resume();
+      await _audioPlayer.play(DeviceFileSource(_audioPath!));
     } catch (e) {
       _notifyErrorCallbacks('Failed to play audio: $e');
       rethrow;
@@ -224,12 +220,7 @@ class ExampleAudioPlayerService {
     if (_isDisposed) throw StateError('Player has been disposed');
 
     try {
-      final clampedPosition = Duration(
-        milliseconds: position.inMilliseconds.clamp(
-          0,
-          _duration.inMilliseconds,
-        ),
-      );
+      final clampedPosition = Duration(milliseconds: position.inMilliseconds.clamp(0, _duration.inMilliseconds));
       await _audioPlayer.seek(clampedPosition);
     } catch (e) {
       _notifyErrorCallbacks('Failed to seek: $e');
@@ -270,7 +261,7 @@ class ExampleAudioPlayerService {
     try {
       await _audioPlayer.dispose();
     } catch (e) {
-      //'Error disposing audio player: $e');
+      // Error disposing audio player
     }
 
     _instances.remove(playerId);
@@ -323,7 +314,7 @@ class ExampleAudioPlayerService {
       try {
         callback(state);
       } catch (e) {
-        //'Error in state callback: $e');
+        // Error in state callback
       }
     }
   }
@@ -333,7 +324,7 @@ class ExampleAudioPlayerService {
       try {
         callback(position);
       } catch (e) {
-        //'Error in position callback: $e');
+        // Error in position callback
       }
     }
   }
@@ -343,7 +334,7 @@ class ExampleAudioPlayerService {
       try {
         callback(duration);
       } catch (e) {
-        //'Error in duration callback: $e');
+        // Error in duration callback
       }
     }
   }
@@ -353,7 +344,7 @@ class ExampleAudioPlayerService {
       try {
         callback(error);
       } catch (e) {
-        //'Error in error callback: $e');
+        // Error in error callback
       }
     }
   }

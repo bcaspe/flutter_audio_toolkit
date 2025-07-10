@@ -1,5 +1,5 @@
 name: flutter_audio_toolkit
-description: "Advanced audio plugin with native support for MP3/WAV/OGG to AAC/M4A conversion, precise trimming, waveform extraction, and comprehensive noise detection & analysis"
+description: "Professional audio processing plugin with native M4A/AAC conversion, precise audio trimming, waveform visualization, and comprehensive noise analysis for cross-platform Flutter applications"
 version: 0.3.8
 homepage: https://github.com/Rameshwar-Amancha/flutter_audio_toolkit
 repository: https://github.com/Rameshwar-Amancha/flutter_audio_toolkit
@@ -30,7 +30,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
   plugin:

@@ -1,16 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_audio_toolkit/flutter_audio_toolkit.dart';
 import '../models/app_state.dart';
-import '../services/example_audio_player_service.dart';
-import 'file_selection_widget.dart';
-import 'player_type_selector_widget.dart';
-import 'true_waveform_player_widget.dart';
-import 'custom_fake_waveform_player.dart';
-import 'lib_fake_waveform_player_widget.dart';
-import 'remote_audio_demo_widget.dart';
 import 'audio_player_documentation_widget.dart';
+import 'true_waveform_player_widget.dart';
+import 'lib_fake_waveform_player_widget.dart';
+import 'custom_fake_waveform_player.dart';
+import 'remote_audio_demo_widget.dart';
 
-/// Main audio player demo widget that coordinates all audio player components
+/// Widget that demonstrates different audio player implementations
 class AudioPlayerDemoWidget extends StatefulWidget {
   final AppState appState;
 
@@ -20,252 +16,101 @@ class AudioPlayerDemoWidget extends StatefulWidget {
   State<AudioPlayerDemoWidget> createState() => _AudioPlayerDemoWidgetState();
 }
 
-class _AudioPlayerDemoWidgetState extends State<AudioPlayerDemoWidget>
-    with SingleTickerProviderStateMixin {
-  WaveformData? _extractedWaveform;
-  bool _isExtracting = false;
-  PlayerType _selectedPlayerType = PlayerType.libFakeWaveform;
+class _AudioPlayerDemoWidgetState extends State<AudioPlayerDemoWidget> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-
-  // Example audio player service for real playback
-  ExampleAudioPlayerService? _examplePlayerService;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _initializeExamplePlayer();
+    _tabController = TabController(length: 5, vsync: this);
+    _tabController.addListener(_handleTabChange);
   }
 
   @override
   void dispose() {
-    _examplePlayerService?.dispose();
     _tabController.dispose();
     super.dispose();
   }
 
-  @override
-  void didUpdateWidget(AudioPlayerDemoWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // When file changes, the custom players will handle their own reinitialization
-    if (widget.appState.selectedFilePath !=
-        oldWidget.appState.selectedFilePath) {}
-  }
-
-  void _initializeExamplePlayer() {
-    _examplePlayerService = ExampleAudioPlayerService.create(
-      playerId: 'demo_player',
-    );
-  }
-
-  // Get the current selected file path from appState
-  String? get _selectedAudioPath => widget.appState.selectedFilePath;
-
-  Future<void> _extractWaveformFromFile() async {
-    if (_selectedAudioPath == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select an audio file first')),
-        );
-      }
-      return;
+  void _handleTabChange() {
+    if (_tabController.indexIsChanging) {
+      setState(() {});
     }
-
-    setState(() {
-      _isExtracting = true;
-    });
-
-    try {
-      final waveform = await FlutterAudioToolkit().extractWaveform(
-        inputPath: _selectedAudioPath!,
-        samplesPerSecond: 100,
-        onProgress: (progress) {
-          // Update extraction progress if needed
-        },
-      );
-
-      if (mounted) {
-        setState(() {
-          _extractedWaveform = waveform;
-          _isExtracting = false;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Waveform extracted successfully!')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isExtracting = false;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to extract waveform: $e')),
-        );
-      }
-    }
-  }
-
-  void _onPlayerTypeChanged(PlayerType playerType) {
-    setState(() {
-      _selectedPlayerType = playerType;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Audio Player Demo',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Explore different audio player types with local files and remote URLs',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-              ),
-            ],
-          ),
-        ),
+    // Determine which file to play (selected, converted, or trimmed)
+    String? fileToPlay = widget.appState.currentPlayingFile ?? widget.appState.selectedFilePath;
 
-        // Tab bar
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text('Audio Player Demo', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+
+        // File selection info
+        if (fileToPlay != null) ...[
+          Card(
+            color: Colors.blue.shade50,
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Playing: ${fileToPlay.split('/').last}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  if (fileToPlay == widget.appState.convertedFilePath)
+                    const Text('(Converted file)', style: TextStyle(fontStyle: FontStyle.italic)),
+                  if (fileToPlay == widget.appState.trimmedFilePath)
+                    const Text('(Trimmed file)', style: TextStyle(fontStyle: FontStyle.italic)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+
         TabBar(
           controller: _tabController,
+          labelColor: Colors.blue,
           tabs: const [
-            Tab(icon: Icon(Icons.music_note), text: 'Player Types'),
-            Tab(icon: Icon(Icons.cloud_download), text: 'Remote Audio'),
+            Tab(text: 'True Waveform'),
+            Tab(text: 'Fake Waveform'),
+            Tab(text: 'Custom Player'),
+            Tab(text: 'Remote Audio'),
+            Tab(text: 'Documentation'),
           ],
         ),
-
-        // Tab view content
         Expanded(
           child: TabBarView(
             controller: _tabController,
-            children: [_buildPlayerTypesTab(), _buildRemoteAudioTab()],
+            children: [
+              // True Waveform Player Tab
+              fileToPlay != null && widget.appState.waveformData != null
+                  ? TrueWaveformPlayerWidget(audioPath: fileToPlay, waveformData: widget.appState.waveformData!)
+                  : TrueWaveformPlayerWidget.placeholder(context),
+
+              // Fake Waveform Player Tab
+              fileToPlay != null
+                  ? LibFakeWaveformPlayerWidget(audioPath: fileToPlay)
+                  : LibFakeWaveformPlayerWidget.placeholder(context),
+
+              // Custom Fake Waveform Player Tab
+              fileToPlay != null
+                  ? CustomFakeWaveformPlayer(
+                    audioPath: fileToPlay,
+                    waveformData: null, // Let the custom player generate its own waveform
+                  )
+                  : CustomFakeWaveformPlayer.placeholder(context),
+
+              // Remote Audio Demo Tab
+              const RemoteAudioDemoWidget(),
+
+              // Documentation Tab
+              const AudioPlayerDocumentationWidget(),
+            ],
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _buildPlayerTypesTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // File selection component
-          FileSelectionWidget(
-            selectedFilePath: _selectedAudioPath,
-            isExtracting: _isExtracting,
-            onExtractWaveform: _extractWaveformFromFile,
-          ),
-
-          const SizedBox(height: 24),
-
-          // Player type selector component
-          PlayerTypeSelectorWidget(
-            selectedPlayerType: _selectedPlayerType,
-            onPlayerTypeChanged: _onPlayerTypeChanged,
-          ),
-
-          const SizedBox(height: 24),
-
-          // Display selected player
-          _buildSelectedPlayer(),
-
-          const SizedBox(height: 32),
-
-          // Documentation component
-          const AudioPlayerDocumentationWidget(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRemoteAudioTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: RemoteAudioDemoWidget(localAudioPath: _selectedAudioPath),
-    );
-  }
-
-  Widget _buildSelectedPlayer() {
-    switch (_selectedPlayerType) {
-      case PlayerType.trueWaveform:
-        return _buildTrueWaveformPlayer();
-      case PlayerType.customFakeWaveform:
-        return _buildCustomFakeWaveformPlayer();
-      case PlayerType.libFakeWaveform:
-        return _buildLibFakeWaveformPlayer();
-    }
-  }
-
-  Widget _buildTrueWaveformPlayer() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'True Waveform Audio Player',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: 16),
-        if (_extractedWaveform != null && _selectedAudioPath != null)
-          TrueWaveformPlayerWidget(
-            audioPath: _selectedAudioPath!,
-            waveformData: _extractedWaveform!,
-          )
-        else
-          TrueWaveformPlayerWidget.placeholder(context),
-      ],
-    );
-  }
-
-  Widget _buildCustomFakeWaveformPlayer() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Custom Fake Waveform Audio Player',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: 16),
-        if (_selectedAudioPath != null)
-          CustomFakeWaveformPlayer(
-            audioPath: _selectedAudioPath!,
-            waveformData:
-                null, // Let the custom player generate its own waveform
-          )
-        else
-          CustomFakeWaveformPlayer.placeholder(context),
-      ],
-    );
-  }
-
-  Widget _buildLibFakeWaveformPlayer() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Lib Fake Waveform Audio Player',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: 16),
-        if (_selectedAudioPath != null)
-          LibFakeWaveformPlayerWidget(audioPath: _selectedAudioPath!)
-        else
-          LibFakeWaveformPlayerWidget.placeholder(context),
       ],
     );
   }

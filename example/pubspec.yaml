@@ -32,9 +32,9 @@ dependencies:
   # Audio playback capability
   audioplayers: ^6.0.0
     # Additional dependencies for the example app
-  file_picker: ^8.1.6
+  file_picker: ^10.2.0
   path_provider: ^2.1.4
-  permission_handler: ^11.3.1
+  permission_handler: ^12.0.1
   provider: ^6.1.2
 
 dev_dependencies:
@@ -48,7 +48,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

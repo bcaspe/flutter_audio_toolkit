@@ -1,10 +1,14 @@
+import 'package:flutter_audio_toolkit/src/core/audio_service.dart';
+
 import 'flutter_audio_toolkit_platform_interface.dart';
-import 'src/flutter_audio_toolkit_src.dart';
+import 'flutter_audio_toolkit_method_channel.dart';
+import 'src/generators/waveform_generator.dart';
+import 'src/models/models.dart';
 
 // Re-export all models and types for public API
 export 'src/models/models.dart';
 
-// Export audio player widgets and services
+// Export audio player widgets and services (these still use the service layer)
 export 'src/widgets/true_waveform_audio_player.dart';
 export 'src/widgets/fake_waveform_audio_player.dart';
 export 'src/widgets/audio_player_controls.dart';
@@ -21,19 +25,33 @@ export 'src/utils/audio_error_handler.dart';
 /// using native platform implementations. All heavy operations are delegated
 /// to specialized service classes for better maintainability and testability.
 class FlutterAudioToolkit {
+  // Ensure platform instance is set
+  static bool _initialized = false;
+
+  static void _ensureInitialized() {
+    if (!_initialized) {
+      FlutterAudioToolkitPlatform.instance = MethodChannelFlutterAudioToolkit();
+      _initialized = true;
+    }
+  }
+
   /// Gets the platform version
   Future<String?> getPlatformVersion() {
+    _ensureInitialized();
     return FlutterAudioToolkitPlatform.instance.getPlatformVersion();
   }
 
-  /// Converts an audio file to the specified format
+  /// Converts an audio file to M4A format with AAC codec
   ///
   /// [inputPath] - Path to the input audio file (mp3, wav, ogg)
   /// [outputPath] - Path where the converted file will be saved
-  /// [format] - Target audio format (aac or m4a)
+  /// [format] - Target audio format (M4A recommended for universal compatibility)
   /// [bitRate] - Target bit rate in kbps (default: 128)
   /// [sampleRate] - Target sample rate in Hz (default: 44100)
   /// [onProgress] - Optional callback for conversion progress
+  ///
+  /// M4A format with AAC codec provides optimal cross-platform compatibility
+  /// and high-quality audio with excellent compression.
   Future<ConversionResult> convertAudio({
     required String inputPath,
     required String outputPath,
@@ -42,7 +60,8 @@ class FlutterAudioToolkit {
     int sampleRate = 44100,
     ProgressCallback? onProgress,
   }) {
-    return AudioService.convertAudio(
+    _ensureInitialized();
+    return FlutterAudioToolkitPlatform.instance.convertAudio(
       inputPath: inputPath,
       outputPath: outputPath,
       format: format,
@@ -62,7 +81,8 @@ class FlutterAudioToolkit {
     int samplesPerSecond = 100,
     ProgressCallback? onProgress,
   }) {
-    return AudioService.extractWaveform(
+    _ensureInitialized();
+    return FlutterAudioToolkitPlatform.instance.extractWaveform(
       inputPath: inputPath,
       samplesPerSecond: samplesPerSecond,
       onProgress: onProgress,
@@ -71,18 +91,17 @@ class FlutterAudioToolkit {
 
   /// Checks if the given audio format is supported for conversion
   Future<bool> isFormatSupported(String inputPath) {
-    return AudioService.isFormatSupported(inputPath);
+    _ensureInitialized();
+    return FlutterAudioToolkitPlatform.instance.isFormatSupported(inputPath);
   }
 
-  /// Gets audio file information without conversion
-  Future<Map<String, dynamic>> getAudioInfo(String inputPath) {
-    return AudioService.getAudioInfo(inputPath);
-  }
-
-  /// Gets basic audio file information without conversion
-  /// This is a lightweight alternative to getAudioInfo for quick metadata checks
-  Future<Map<String, dynamic>> getBasicAudioInfo(String inputPath) {
-    return AudioService.getBasicAudioInfo(inputPath);
+  /// Gets comprehensive audio file information
+  ///
+  /// Returns detailed information about the audio file including format,
+  /// duration, quality metrics, and compatibility information.
+  Future<AudioInfo> getAudioInfo(String inputPath) {
+    _ensureInitialized();
+    return FlutterAudioToolkitPlatform.instance.getAudioInfo(inputPath);
   }
 
   /// Trims an audio file to the specified time range
@@ -91,10 +110,13 @@ class FlutterAudioToolkit {
   /// [outputPath] - Path where the trimmed file will be saved
   /// [startTimeMs] - Start time in milliseconds
   /// [endTimeMs] - End time in milliseconds
-  /// [format] - Target audio format (aac or m4a)
+  /// [format] - Target audio format (M4A recommended for precision)
   /// [bitRate] - Target bit rate in kbps (default: 128)
   /// [sampleRate] - Target sample rate in Hz (default: 44100)
   /// [onProgress] - Optional callback for trimming progress
+  ///
+  /// M4A format ensures precise trimming with frame-accurate cutting
+  /// and maintains high audio quality across all platforms.
   Future<ConversionResult> trimAudio({
     required String inputPath,
     required String outputPath,
@@ -105,7 +127,8 @@ class FlutterAudioToolkit {
     int sampleRate = 44100,
     ProgressCallback? onProgress,
   }) {
-    return AudioService.trimAudio(
+    _ensureInitialized();
+    return FlutterAudioToolkitPlatform.instance.trimAudio(
       inputPath: inputPath,
       outputPath: outputPath,
       startTimeMs: startTimeMs,
@@ -117,11 +140,11 @@ class FlutterAudioToolkit {
     );
   }
 
-  /// Generates fake waveform data for testing or preview purposes
+  /// Generates fake waveform data for preview purposes
   ///
   /// [pattern] - Waveform pattern to generate
-  /// [durationMs] - Duration of the waveform in milliseconds (default: 30000 = 30 seconds)
-  /// [samplesPerSecond] - Number of amplitude samples per second (default: 100)
+  /// [durationMs] - Duration in milliseconds (default: 30000 = 30 seconds)
+  /// [samplesPerSecond] - Samples per second (default: 100)
   /// [frequency] - Base frequency for pattern generation (default: 440.0 Hz)
   /// [sampleRate] - Sample rate in Hz (default: 44100)
   /// [channels] - Number of audio channels (default: 2 for stereo)
@@ -220,16 +243,15 @@ class FlutterAudioToolkit {
     );
   }
 
-  /// Generates a fake waveform for a network audio file without downloading
-  /// This is useful for quick previews or when you want to show a waveform
-  /// without the overhead of downloading and processing the actual file
+  /// Generates fake waveform for network audio without downloading
+  /// Useful for quick previews without the overhead of downloading
   ///
   /// [url] - URL of the audio file (used for consistent pattern generation)
   /// [pattern] - Waveform pattern to generate
-  /// [estimatedDurationMs] - Estimated duration in milliseconds (default: 180000 = 3 minutes)
-  /// [samplesPerSecond] - Number of amplitude samples per second (default: 100)
+  /// [estimatedDurationMs] - Estimated duration (default: 180000 = 3 minutes)
+  /// [samplesPerSecond] - Samples per second (default: 100)
   ///
-  /// Returns a [WaveformData] object with fake but realistic-looking waveform data
+  /// Returns a [WaveformData] object with realistic-looking waveform data
   WaveformData generateFakeWaveformForUrl({
     required String url,
     required WaveformPattern pattern,
@@ -249,11 +271,7 @@ class FlutterAudioToolkit {
   /// [url] - URL of the audio file to download
   /// [outputPath] - Local path where the downloaded file will be saved
   /// [onProgress] - Optional callback for download progress
-  Future<String> downloadFile(
-    String url,
-    String outputPath, {
-    ProgressCallback? onProgress,
-  }) {
+  Future<String> downloadFile(String url, String outputPath, {ProgressCallback? onProgress}) {
     return AudioService.downloadFile(url, outputPath, onProgress: onProgress);
   }
 
@@ -279,17 +297,13 @@ class FlutterAudioToolkit {
     required String localPath,
     ProgressCallback? onProgress,
   }) {
-    return AudioService.extractMetadataFromUrl(
-      url: url,
-      localPath: localPath,
-      onProgress: onProgress,
-    );
+    return AudioService.extractMetadataFromUrl(url: url, localPath: localPath, onProgress: onProgress);
   }
 
   /// Analyzes an audio file for noise detection and quality assessment
   ///
   /// [inputPath] - Path to the input audio file
-  /// [segmentDurationMs] - Duration of analysis segments in milliseconds (default: 5000)
+  /// [sensitivityLevel] - Noise detection sensitivity (0.0 to 1.0, default: 0.5)
   /// [onProgress] - Optional callback for analysis progress
   ///
   /// Returns a comprehensive [NoiseDetectionResult] with:
@@ -302,62 +316,18 @@ class FlutterAudioToolkit {
   /// - Recommendations for improvement
   Future<NoiseDetectionResult> analyzeNoise({
     required String inputPath,
-    int segmentDurationMs = 5000,
+    double sensitivityLevel = 0.5,
     ProgressCallback? onProgress,
   }) {
-    return NoiseDetectionService.analyzeAudio(
+    _ensureInitialized();
+    return FlutterAudioToolkitPlatform.instance.analyzeAudioNoise(
       inputPath: inputPath,
-      segmentDurationMs: segmentDurationMs,
+      sensitivityLevel: sensitivityLevel,
       onProgress: onProgress,
     );
   }
-
-  /// Analyzes audio from a network URL for noise detection
-  ///
-  /// [url] - URL of the audio file to analyze
-  /// [localPath] - Temporary local path for downloading
-  /// [segmentDurationMs] - Duration of analysis segments in milliseconds (default: 5000)
-  /// [onDownloadProgress] - Optional callback for download progress (0.0 to 0.5)
-  /// [onAnalysisProgress] - Optional callback for analysis progress (0.5 to 1.0)
-  ///
-  /// Returns a comprehensive [NoiseDetectionResult] with noise and quality analysis
-  Future<NoiseDetectionResult> analyzeNoiseFromUrl({
-    required String url,
-    required String localPath,
-    int segmentDurationMs = 5000,
-    ProgressCallback? onDownloadProgress,
-    ProgressCallback? onAnalysisProgress,
-  }) {
-    return NoiseDetectionService.analyzeAudioFromUrl(
-      url: url,
-      localPath: localPath,
-      segmentDurationMs: segmentDurationMs,
-      onDownloadProgress: onDownloadProgress,
-      onAnalysisProgress: onAnalysisProgress,
-    );
-  }
-
-  /// Performs a quick noise check without detailed analysis
-  ///
-  /// [inputPath] - Path to the input audio file
-  /// [onProgress] - Optional callback for analysis progress
-  ///
-  /// Returns basic noise and volume information for quick assessment
-  Future<Map<String, dynamic>> quickNoiseCheck({
-    required String inputPath,
-    ProgressCallback? onProgress,
-  }) {
-    return NoiseDetectionService.quickNoiseCheck(
-      inputPath: inputPath,
-      onProgress: onProgress,
-    );
-  }
-
-  // Backward compatibility aliases
 
   /// Analyzes an audio file for noise detection and quality assessment
-  ///
-  /// This is an alias for [analyzeNoise] for backward compatibility.
   ///
   /// [inputPath] - Path to the input audio file
   /// [segmentDurationMs] - Duration of analysis segments in milliseconds (default: 5000)
@@ -371,42 +341,71 @@ class FlutterAudioToolkit {
   /// - Frequency analysis
   /// - Time-based segment analysis
   /// - Recommendations for improvement
-  Future<NoiseDetectionResult> analyzeAudioNoise({
+  /// (This method is deprecated - use the new analyzeNoise method below)
+  @Deprecated('Use analyzeNoise instead')
+  Future<NoiseDetectionResult> analyzeNoiseWithSegments({
     required String inputPath,
     int segmentDurationMs = 5000,
     ProgressCallback? onProgress,
   }) {
-    return analyzeNoise(
+    _ensureInitialized();
+    return FlutterAudioToolkitPlatform.instance.analyzeAudioNoise(
       inputPath: inputPath,
-      segmentDurationMs: segmentDurationMs,
+      sensitivityLevel: 0.5, // Default sensitivity
       onProgress: onProgress,
     );
   }
 
   /// Analyzes audio from a network URL for noise detection
-  ///
-  /// This is an alias for [analyzeNoiseFromUrl] for backward compatibility.
-  ///
-  /// [url] - URL of the audio file to analyze
-  /// [localPath] - Temporary local path for downloading
-  /// [segmentDurationMs] - Duration of analysis segments in milliseconds (default: 5000)
-  /// [onDownloadProgress] - Optional callback for download progress (0.0 to 0.5)
-  /// [onAnalysisProgress] - Optional callback for analysis progress (0.5 to 1.0)
-  ///
-  /// Returns a comprehensive [NoiseDetectionResult] with noise and quality analysis
-  Future<NoiseDetectionResult> analyzeAudioNoiseFromUrl({
+  /// (This method is deprecated - use downloadAudioFromUrl + analyzeNoise instead)
+  @Deprecated('Use downloadAudioFromUrl + analyzeNoise instead')
+  Future<NoiseDetectionResult> analyzeNoiseFromUrl({
     required String url,
     required String localPath,
-    int segmentDurationMs = 5000,
+    double sensitivityLevel = 0.5,
     ProgressCallback? onDownloadProgress,
     ProgressCallback? onAnalysisProgress,
-  }) {
-    return analyzeNoiseFromUrl(
+  }) async {
+    // Legacy implementation using service layer
+    final audioPath = await downloadAudioFromUrl(
       url: url,
       localPath: localPath,
-      segmentDurationMs: segmentDurationMs,
       onDownloadProgress: onDownloadProgress,
-      onAnalysisProgress: onAnalysisProgress,
     );
+
+    return analyzeNoise(inputPath: audioPath, sensitivityLevel: sensitivityLevel, onProgress: onAnalysisProgress);
+  }
+
+  /// Downloads an audio file from a network URL
+  ///
+  /// [url] - URL of the audio file to download
+  /// [localPath] - Local path where the downloaded file will be saved
+  /// [onDownloadProgress] - Optional callback for download progress
+  ///
+  /// Returns the local file path when download completes.
+  Future<String> downloadAudioFromUrl({
+    required String url,
+    required String localPath,
+    ProgressCallback? onDownloadProgress,
+  }) {
+    _ensureInitialized();
+    return FlutterAudioToolkitPlatform.instance.downloadAudioFromUrl(
+      url: url,
+      localPath: localPath,
+      onDownloadProgress: onDownloadProgress,
+    );
+  }
+
+  /// Configures the audio session for optimal audio processing
+  ///
+  /// This is primarily used on iOS to set up the audio session for recording
+  /// and playback. On other platforms, this method may be a no-op.
+  ///
+  /// [configuration] - Audio session configuration options
+  ///
+  /// Returns true if configuration was successful.
+  Future<bool> configureAudioSession({Map<String, dynamic>? configuration}) {
+    _ensureInitialized();
+    return FlutterAudioToolkitPlatform.instance.configureAudioSession(configuration: configuration);
   }
 }

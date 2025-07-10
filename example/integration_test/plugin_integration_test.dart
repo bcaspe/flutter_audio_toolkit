@@ -24,17 +24,15 @@ void main() {
       expect(version?.isNotEmpty, true);
     });
 
-    testWidgets('Priority Requirement 1: Audio Conversion API exists', (
-      WidgetTester tester,
-    ) async {
+    testWidgets('Priority Requirement 1: Audio Conversion API exists', (WidgetTester tester) async {
       // Test that convertAudio method exists and can be called
       // This is a basic API existence test - full functionality requires actual audio files
       expect(() async {
         try {
           await plugin.convertAudio(
             inputPath: '/nonexistent/path.mp3',
-            outputPath: '/nonexistent/output.aac',
-            format: AudioFormat.aac,
+            outputPath: '/nonexistent/output.m4a',
+            format: AudioFormat.m4a,
           );
         } catch (e) {
           // Expected to fail with file not found, but method should exist
@@ -48,19 +46,17 @@ void main() {
       }, returnsNormally);
     });
 
-    testWidgets('Priority Requirement 2: Audio Trimming API exists', (
-      WidgetTester tester,
-    ) async {
+    testWidgets('Priority Requirement 2: Audio Trimming API exists', (WidgetTester tester) async {
       // Test that trimAudio method exists and can be called
       // This is a basic API existence test - full functionality requires actual audio files
       expect(() async {
         try {
           await plugin.trimAudio(
             inputPath: '/nonexistent/path.mp3',
-            outputPath: '/nonexistent/trimmed.aac',
+            outputPath: '/nonexistent/trimmed.m4a',
             startTimeMs: 1000,
             endTimeMs: 5000,
-            format: AudioFormat.aac,
+            format: AudioFormat.m4a,
           );
         } catch (e) {
           // Expected to fail with file not found, but method should exist

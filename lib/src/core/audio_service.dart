@@ -4,30 +4,38 @@ import '../../flutter_audio_toolkit_platform_interface.dart';
 
 /// Core audio operations service that handles platform-specific functionality
 class AudioService {
-  /// Converts an audio file to the specified format
-  ///
-  /// [inputPath] - Path to the input audio file (mp3, wav, ogg)
-  /// [outputPath] - Path where the converted file will be saved
-  /// [format] - Target audio format (aac or m4a)
-  /// [bitRate] - Target bit rate in kbps (default: 128)
-  /// [sampleRate] - Target sample rate in Hz (default: 44100)
-  /// [onProgress] - Optional callback for conversion progress
-  static Future<ConversionResult> convertAudio({
-    required String inputPath,
-    required String outputPath,
-    required AudioFormat format,
-    int bitRate = 128,
-    int sampleRate = 44100,
-    ProgressCallback? onProgress,
-  }) {
-    return FlutterAudioToolkitPlatform.instance.convertAudio(
-      inputPath: inputPath,
-      outputPath: outputPath,
-      format: format,
-      bitRate: bitRate,
-      sampleRate: sampleRate,
-      onProgress: onProgress,
-    );
+  /// Ensures proper file extension based on platform and format
+  static String _ensureProperExtension(String outputPath, AudioFormat format) {
+    // Handle case where path might not have an extension
+    final lastDotIndex = outputPath.lastIndexOf('.');
+    String pathWithoutExtension;
+
+    if (lastDotIndex == -1) {
+      // No extension found
+      pathWithoutExtension = outputPath;
+    } else {
+      pathWithoutExtension = outputPath.substring(0, lastDotIndex);
+    }
+
+    // Always use M4A format for conversion (AAC codec in M4A container)
+    // This ensures universal playback support across all devices and players
+    if (format == AudioFormat.m4a) {
+      return '$pathWithoutExtension.m4a';
+    }
+
+    // Keep original extension for copy operations
+    if (format == AudioFormat.copy) {
+      // Check if the path already has an extension
+      if (lastDotIndex != -1) {
+        return outputPath;
+      } else {
+        // Default to M4A if no extension provided
+        return '$pathWithoutExtension.m4a';
+      }
+    }
+
+    // Default fallback to M4A for any other format
+    return '$pathWithoutExtension.m4a';
   }
 
   /// Extracts waveform data from an audio file
@@ -53,10 +61,15 @@ class AudioService {
   /// [outputPath] - Path where the trimmed file will be saved
   /// [startTimeMs] - Start time in milliseconds
   /// [endTimeMs] - End time in milliseconds
-  /// [format] - Target audio format (aac or m4a)
+  /// [format] - Target audio format:
+  ///   - AudioFormat.m4a: AAC codec in M4A container (universal compatibility)
+  ///   - AudioFormat.copy: Keep original format (lossless where possible)
   /// [bitRate] - Target bit rate in kbps (default: 128)
   /// [sampleRate] - Target sample rate in Hz (default: 44100)
   /// [onProgress] - Optional callback for trimming progress
+  ///
+  /// Note: M4A format (AAC codec in M4A container) provides the best
+  /// cross-platform compatibility for trimming operations
   static Future<ConversionResult> trimAudio({
     required String inputPath,
     required String outputPath,
@@ -67,9 +80,12 @@ class AudioService {
     int sampleRate = 44100,
     ProgressCallback? onProgress,
   }) {
+    // Ensure proper file extension for cross-platform compatibility
+    final correctedOutputPath = _ensureProperExtension(outputPath, format);
+
     return FlutterAudioToolkitPlatform.instance.trimAudio(
       inputPath: inputPath,
-      outputPath: outputPath,
+      outputPath: correctedOutputPath,
       startTimeMs: startTimeMs,
       endTimeMs: endTimeMs,
       format: format,
@@ -85,7 +101,7 @@ class AudioService {
   }
 
   /// Gets audio file information without conversion
-  static Future<Map<String, dynamic>> getAudioInfo(String inputPath) {
+  static Future<AudioInfo> getAudioInfo(String inputPath) {
     return FlutterAudioToolkitPlatform.instance.getAudioInfo(inputPath);
   }
 
@@ -95,10 +111,21 @@ class AudioService {
   ///
   /// Returns an [AudioMetadata] object containing all available metadata
   static Future<AudioMetadata> extractMetadata(String inputPath) async {
-    final metadataMap = await FlutterAudioToolkitPlatform.instance.getAudioInfo(
-      inputPath,
-    );
-    return AudioMetadata.fromMap(metadataMap);
+    final audioInfo = await FlutterAudioToolkitPlatform.instance.getAudioInfo(inputPath);
+    // Convert AudioInfo to Map for AudioMetadata.fromMap
+    return AudioMetadata.fromMap({
+      'title': audioInfo.title,
+      'artist': audioInfo.artist,
+      'album': audioInfo.album,
+      'year': audioInfo.year,
+      'genre': audioInfo.genre,
+      'durationMs': audioInfo.durationMs,
+      'bitrate': audioInfo.bitRate,
+      'sampleRate': audioInfo.sampleRate,
+      'channels': audioInfo.channels,
+      'format': audioInfo.format,
+      'fileSizeBytes': audioInfo.fileSize,
+    });
   }
 
   /// Extracts metadata from a network audio file
@@ -134,8 +161,34 @@ class AudioService {
   /// Gets basic audio information as legacy Map format
   ///
   /// Use [extractMetadata] for structured metadata access
-  static Future<Map<String, dynamic>> getBasicAudioInfo(String inputPath) {
-    return getAudioInfo(inputPath);
+  static Future<Map<String, dynamic>> getBasicAudioInfo(String inputPath) async {
+    final audioInfo = await getAudioInfo(inputPath);
+    // Convert AudioInfo to Map for legacy compatibility
+    return {
+      'isValid': audioInfo.isValid,
+      'fileSize': audioInfo.fileSize,
+      'durationMs': audioInfo.durationMs,
+      'mimeType': audioInfo.mimeType,
+      'format': audioInfo.format,
+      'codec': audioInfo.codec,
+      'bitRate': audioInfo.bitRate,
+      'sampleRate': audioInfo.sampleRate,
+      'channels': audioInfo.channels,
+      'bitDepth': audioInfo.bitDepth,
+      'supportedForConversion': audioInfo.supportedForConversion,
+      'supportedForTrimming': audioInfo.supportedForTrimming,
+      'supportedForLosslessTrimming': audioInfo.supportedForLosslessTrimming,
+      'supportedForWaveform': audioInfo.supportedForWaveform,
+      'title': audioInfo.title,
+      'artist': audioInfo.artist,
+      'album': audioInfo.album,
+      'year': audioInfo.year,
+      'genre': audioInfo.genre,
+      'error': audioInfo.error,
+      'details': audioInfo.details,
+      'formatDiagnostics': audioInfo.formatDiagnostics,
+      'foundTracks': audioInfo.foundTracks,
+    };
   }
 
   /// Downloads an audio file from a network URL and extracts its waveform
@@ -160,9 +213,7 @@ class AudioService {
         url,
         localPath,
         onProgress: (progress) {
-          onDownloadProgress?.call(
-            progress * 0.5,
-          ); // Download takes 50% of total progress
+          onDownloadProgress?.call(progress * 0.5); // Download takes 50% of total progress
         },
       );
 
@@ -171,9 +222,7 @@ class AudioService {
         inputPath: localPath,
         samplesPerSecond: samplesPerSecond,
         onProgress: (progress) {
-          onExtractionProgress?.call(
-            0.5 + progress * 0.5,
-          ); // Extraction takes remaining 50%
+          onExtractionProgress?.call(0.5 + progress * 0.5); // Extraction takes remaining 50%
         },
       );
 
@@ -193,11 +242,7 @@ class AudioService {
   /// [url] - URL of the audio file to download
   /// [outputPath] - Local path where the downloaded file will be saved
   /// [onProgress] - Optional callback for download progress
-  static Future<String> downloadFile(
-    String url,
-    String outputPath, {
-    ProgressCallback? onProgress,
-  }) async {
+  static Future<String> downloadFile(String url, String outputPath, {ProgressCallback? onProgress}) async {
     await NetworkService.downloadFile(url, outputPath, onProgress: onProgress);
     return outputPath;
   }
