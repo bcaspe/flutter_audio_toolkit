@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.0] - 2025-07-05
+
+### 🚀 First Stable Release
+- **STABLE**: First stable release with production-ready API
+- **FIXED**: Audio trimming compatibility issues on Android with MediaMuxer
+- **ENHANCED**: Improved high-quality audio trimming with 320kbps bitrate support
+- **OPTIMIZED**: Better error handling and logging for audio operations
+
+### 🔊 Audio Trimming Improvements
+- **Fixed**: "Failed to add the track to the muxer" error in Android implementation
+- **Enhanced**: Always using M4A format with AAC codec for best compatibility
+- **Optimized**: Higher bitrate (320kbps) for better audio quality
+- **Improved**: Better progress tracking and error handling
+
+### 📱 Platform Stability
+- **Android**: Fixed MediaMuxer compatibility issues
+- **iOS**: Improved AVFoundation integration
+- **All Platforms**: Enhanced error handling and recovery
+
+### 📚 Documentation
+- Updated README with latest version information
+- Improved code documentation
+- Enhanced example app with better UI feedback
+
 ## [0.3.8] - 2025-06-28
 
 ### 🔧 Critical Error Handling Improvements

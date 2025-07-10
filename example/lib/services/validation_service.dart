@@ -30,7 +30,9 @@ class ValidationService {
     if (appState.selectedFilePath == null) return false;
 
     try {
-      final isSupported = await appState.audioToolkit.isFormatSupported(appState.selectedFilePath!);
+      final isSupported = await appState.audioToolkit.isFormatSupported(
+        appState.selectedFilePath!,
+      );
 
       if (!isSupported) {
         if (kDebugMode) {
@@ -40,15 +42,20 @@ class ValidationService {
       }
 
       // Additional validation for specific formats
-      final extension = appState.selectedFilePath!.split('.').last.toLowerCase();
+      final extension =
+          appState.selectedFilePath!.split('.').last.toLowerCase();
 
       // Log format information
       if (kDebugMode) {
         print('File format: $extension');
         if (extension == 'm4a' || extension == 'aac') {
-          print('M4A/AAC format detected - optimized for cross-platform compatibility');
+          print(
+            'M4A/AAC format detected - optimized for cross-platform compatibility',
+          );
         } else if (extension == 'mp3') {
-          print('MP3 format detected - widely supported but may have limitations with trimming');
+          print(
+            'MP3 format detected - widely supported but may have limitations with trimming',
+          );
         } else if (extension == 'wav') {
           print('WAV format detected - lossless but large file size');
         }
@@ -76,14 +83,20 @@ class ValidationService {
 
   /// Validates the trim range
   static bool validateTrimRange(AppState appState) {
-    if (appState.audioInfo == null || appState.audioInfo!.durationMs == null) return false;
+    if (appState.audioInfo == null || appState.audioInfo!.durationMs == null) {
+      return false;
+    }
 
     final durationMs = appState.audioInfo!.durationMs!;
 
     // Ensure trim range is valid
-    if (appState.trimStartMs < 0 || appState.trimEndMs <= appState.trimStartMs || appState.trimEndMs > durationMs) {
+    if (appState.trimStartMs < 0 ||
+        appState.trimEndMs <= appState.trimStartMs ||
+        appState.trimEndMs > durationMs) {
       if (kDebugMode) {
-        print('Invalid trim range: ${appState.trimStartMs}ms - ${appState.trimEndMs}ms (duration: ${durationMs}ms)');
+        print(
+          'Invalid trim range: ${appState.trimStartMs}ms - ${appState.trimEndMs}ms (duration: ${durationMs}ms)',
+        );
       }
       return false;
     }
@@ -91,7 +104,9 @@ class ValidationService {
     // Ensure minimum trim duration (500ms)
     if (appState.trimEndMs - appState.trimStartMs < 500) {
       if (kDebugMode) {
-        print('Trim duration too short: ${appState.trimEndMs - appState.trimStartMs}ms (minimum: 500ms)');
+        print(
+          'Trim duration too short: ${appState.trimEndMs - appState.trimStartMs}ms (minimum: 500ms)',
+        );
       }
       return false;
     }
@@ -104,7 +119,9 @@ class ValidationService {
     // Log format information
     if (kDebugMode) {
       // We're always using M4A format now for better compatibility
-      print('Using M4A format for trimming - best cross-platform compatibility');
+      print(
+        'Using M4A format for trimming - best cross-platform compatibility',
+      );
       print('Bit rate: ${appState.trimBitRate} kbps');
     }
 
@@ -125,7 +142,9 @@ class ValidationService {
         // For modern Android (11+), skip permission requests entirely
         if (androidVersion >= 30) {
           if (kDebugMode) {
-            print('Android 11+ detected - using scoped storage, skipping permission requests');
+            print(
+              'Android 11+ detected - using scoped storage, skipping permission requests',
+            );
           }
           return true;
         }
@@ -146,7 +165,9 @@ class ValidationService {
             final result = await Permission.storage.request();
             if (!result.isGranted) {
               if (kDebugMode) {
-                print('Storage permission denied - will attempt file picker anyway');
+                print(
+                  'Storage permission denied - will attempt file picker anyway',
+                );
               }
               // Even on older Android, try to continue - some file pickers work without explicit permissions
               return true;
@@ -160,7 +181,9 @@ class ValidationService {
         } catch (permissionError) {
           if (kDebugMode) {
             print('Permission handler failed: $permissionError');
-            print('This often happens on newer Android versions - continuing anyway');
+            print(
+              'This often happens on newer Android versions - continuing anyway',
+            );
           }
           // If permission_handler fails, just continue
           return true;
@@ -186,13 +209,17 @@ class ValidationService {
         final androidVersion = await _getAndroidVersion();
 
         if (kDebugMode) {
-          print('Android API level: $androidVersion - using direct validation (bypassing permission_handler)');
+          print(
+            'Android API level: $androidVersion - using direct validation (bypassing permission_handler)',
+          );
         }
 
         // For Android 11+, no permissions needed due to scoped storage
         if (androidVersion >= 30) {
           if (kDebugMode) {
-            print('Android 11+ - scoped storage allows file picker without explicit permissions');
+            print(
+              'Android 11+ - scoped storage allows file picker without explicit permissions',
+            );
           }
           return true;
         }
@@ -200,7 +227,9 @@ class ValidationService {
         // For older Android, we can't request permissions without permission_handler
         // but modern file pickers often work anyway
         if (kDebugMode) {
-          print('Older Android - file picker may work without explicit permission requests');
+          print(
+            'Older Android - file picker may work without explicit permission requests',
+          );
         }
         return true;
       } catch (e) {

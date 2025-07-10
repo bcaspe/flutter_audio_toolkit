@@ -24,7 +24,9 @@ void main() {
       expect(version?.isNotEmpty, true);
     });
 
-    testWidgets('Priority Requirement 1: Audio Conversion API exists', (WidgetTester tester) async {
+    testWidgets('Priority Requirement 1: Audio Conversion API exists', (
+      WidgetTester tester,
+    ) async {
       // Test that convertAudio method exists and can be called
       // This is a basic API existence test - full functionality requires actual audio files
       expect(() async {
@@ -46,7 +48,9 @@ void main() {
       }, returnsNormally);
     });
 
-    testWidgets('Priority Requirement 2: Audio Trimming API exists', (WidgetTester tester) async {
+    testWidgets('Priority Requirement 2: Audio Trimming API exists', (
+      WidgetTester tester,
+    ) async {
       // Test that trimAudio method exists and can be called
       // This is a basic API existence test - full functionality requires actual audio files
       expect(() async {

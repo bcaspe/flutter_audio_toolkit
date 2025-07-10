@@ -177,7 +177,9 @@ abstract class FlutterAudioToolkitPlatform extends PlatformInterface {
     required String localPath,
     ProgressCallback? onDownloadProgress,
   }) {
-    throw UnimplementedError('downloadAudioFromUrl() has not been implemented.');
+    throw UnimplementedError(
+      'downloadAudioFromUrl() has not been implemented.',
+    );
   }
 
   // Audio Session Configuration (iOS specific, no-op on other platforms)
@@ -190,6 +192,8 @@ abstract class FlutterAudioToolkitPlatform extends PlatformInterface {
   ///
   /// Returns true if configuration was successful.
   Future<bool> configureAudioSession({Map<String, dynamic>? configuration}) {
-    throw UnimplementedError('configureAudioSession() has not been implemented.');
+    throw UnimplementedError(
+      'configureAudioSession() has not been implemented.',
+    );
   }
 }

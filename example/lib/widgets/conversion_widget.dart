@@ -10,7 +10,11 @@ class ConversionWidget extends StatelessWidget {
   final AppState appState;
   final VoidCallback onStateChanged;
 
-  const ConversionWidget({super.key, required this.appState, required this.onStateChanged});
+  const ConversionWidget({
+    super.key,
+    required this.appState,
+    required this.onStateChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +26,10 @@ class ConversionWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Audio Conversion', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Audio Conversion',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 16),
 
             // Format selection
@@ -33,8 +40,14 @@ class ConversionWidget extends StatelessWidget {
                 DropdownButton<AudioFormat>(
                   value: appState.selectedConversionFormat,
                   items: const [
-                    DropdownMenuItem(value: AudioFormat.m4a, child: Text('M4A (AAC codec)')),
-                    DropdownMenuItem(value: AudioFormat.copy, child: Text('Copy (Lossless)')),
+                    DropdownMenuItem(
+                      value: AudioFormat.m4a,
+                      child: Text('M4A (AAC codec)'),
+                    ),
+                    DropdownMenuItem(
+                      value: AudioFormat.copy,
+                      child: Text('Copy (Lossless)'),
+                    ),
                   ],
                   onChanged: (AudioFormat? value) {
                     if (value != null) {
@@ -57,9 +70,18 @@ class ConversionWidget extends StatelessWidget {
                     value: appState.selectedBitRate,
                     items: const [
                       DropdownMenuItem(value: 64, child: Text('64 kbps (Low)')),
-                      DropdownMenuItem(value: 128, child: Text('128 kbps (Medium)')),
-                      DropdownMenuItem(value: 192, child: Text('192 kbps (High)')),
-                      DropdownMenuItem(value: 256, child: Text('256 kbps (Very High)')),
+                      DropdownMenuItem(
+                        value: 128,
+                        child: Text('128 kbps (Medium)'),
+                      ),
+                      DropdownMenuItem(
+                        value: 192,
+                        child: Text('192 kbps (High)'),
+                      ),
+                      DropdownMenuItem(
+                        value: 256,
+                        child: Text('256 kbps (Very High)'),
+                      ),
                     ],
                     onChanged: (int? value) {
                       if (value != null) {
@@ -84,7 +106,10 @@ class ConversionWidget extends StatelessWidget {
 
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: appState.isConverting ? null : () => _convertAudio(appState.selectedConversionFormat),
+              onPressed:
+                  appState.isConverting
+                      ? null
+                      : () => _convertAudio(appState.selectedConversionFormat),
               child: Text(
                 appState.selectedConversionFormat == AudioFormat.m4a
                     ? 'Convert to M4A (AAC codec)'
@@ -96,14 +121,18 @@ class ConversionWidget extends StatelessWidget {
               const SizedBox(height: 16),
               LinearProgressIndicator(value: appState.conversionProgress),
               const SizedBox(height: 8),
-              Text('Converting: ${(appState.conversionProgress * 100).toStringAsFixed(1)}%'),
+              Text(
+                'Converting: ${(appState.conversionProgress * 100).toStringAsFixed(1)}%',
+              ),
 
               // Add manual completion button when stuck at 100%
               if (appState.conversionProgress >= 1.0) ...[
                 const SizedBox(height: 8),
                 ElevatedButton(
                   onPressed: () => _forceCompleteConversion(context),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                  ),
                   child: const Text('Force Complete (Stuck at 100%?)'),
                 ),
                 const SizedBox(height: 4),
@@ -115,7 +144,9 @@ class ConversionWidget extends StatelessWidget {
             ],
             if (appState.convertedFilePath != null) ...[
               const SizedBox(height: 16),
-              Text('Converted file: ${appState.convertedFilePath!.split('/').last}'),
+              Text(
+                'Converted file: ${appState.convertedFilePath!.split('/').last}',
+              ),
               const SizedBox(height: 8),
               ElevatedButton(
                 onPressed: () => _playConvertedFile(context),
@@ -136,13 +167,18 @@ class ConversionWidget extends StatelessWidget {
       print('Current isConverting: ${appState.isConverting}');
     }
 
+    // Set the selected format in the app state
+    appState.selectedConversionFormat = format;
+
     try {
-      await AudioService.convertAudio(appState, format, bitRate: appState.selectedBitRate);
+      await AudioService.convertAudio(appState);
 
       if (kDebugMode) {
         print('*** CONVERSION WIDGET: AudioService.convertAudio returned ***');
         print('Post-conversion isConverting: ${appState.isConverting}');
-        print('Post-conversion convertedFilePath: ${appState.convertedFilePath}');
+        print(
+          'Post-conversion convertedFilePath: ${appState.convertedFilePath}',
+        );
       }
     } catch (e) {
       if (kDebugMode) {
@@ -160,7 +196,9 @@ class ConversionWidget extends StatelessWidget {
       // Additional safety check to ensure conversion state is reset
       if (appState.isConverting) {
         if (kDebugMode) {
-          print('*** CONVERSION WIDGET: WARNING - isConverting still true, forcing reset ***');
+          print(
+            '*** CONVERSION WIDGET: WARNING - isConverting still true, forcing reset ***',
+          );
         }
         appState.isConverting = false;
         onStateChanged();
@@ -182,7 +220,9 @@ class ConversionWidget extends StatelessWidget {
       // Show a snackbar to indicate playback
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Playing converted file: ${appState.convertedFilePath!.split('/').last}'),
+          content: Text(
+            'Playing converted file: ${appState.convertedFilePath!.split('/').last}',
+          ),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 2),
         ),
@@ -195,13 +235,17 @@ class ConversionWidget extends StatelessWidget {
   void _forceCompleteConversion(BuildContext context) async {
     if (kDebugMode) {
       print('*** USER MANUALLY FORCING CONVERSION COMPLETION ***');
-      print('Progress was: ${(appState.conversionProgress * 100).toStringAsFixed(1)}%');
+      print(
+        'Progress was: ${(appState.conversionProgress * 100).toStringAsFixed(1)}%',
+      );
     }
 
     // Store context-dependent functions early to avoid async gaps
     void showSnackBar(String message, Color backgroundColor) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: backgroundColor));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: backgroundColor),
+        );
       }
     }
 
@@ -241,7 +285,10 @@ class ConversionWidget extends StatelessWidget {
             print('*** MANUALLY COMPLETED CONVERSION SUCCESSFULLY ***');
           }
 
-          showSnackBar('Conversion completed manually! File found and ready.', Colors.green);
+          showSnackBar(
+            'Conversion completed manually! File found and ready.',
+            Colors.green,
+          );
           return;
         }
       }
@@ -250,7 +297,10 @@ class ConversionWidget extends StatelessWidget {
         print('*** NO SUITABLE CONVERSION FILE FOUND ***');
       }
 
-      showSnackBar('No completed conversion file found. The conversion may still be processing.', Colors.orange);
+      showSnackBar(
+        'No completed conversion file found. The conversion may still be processing.',
+        Colors.orange,
+      );
     } catch (e) {
       if (kDebugMode) {
         print('*** ERROR DURING MANUAL COMPLETION: $e ***');

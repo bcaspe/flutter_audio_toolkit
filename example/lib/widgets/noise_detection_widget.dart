@@ -7,7 +7,11 @@ class NoiseDetectionWidget extends StatefulWidget {
   final AppState appState;
   final VoidCallback onStateChanged;
 
-  const NoiseDetectionWidget({super.key, required this.appState, required this.onStateChanged});
+  const NoiseDetectionWidget({
+    super.key,
+    required this.appState,
+    required this.onStateChanged,
+  });
 
   @override
   State<NoiseDetectionWidget> createState() => _NoiseDetectionWidgetState();
@@ -74,10 +78,21 @@ class _NoiseDetectionWidgetState extends State<NoiseDetectionWidget> {
                   onPressed: _isAnalyzing ? null : _analyzeAudio,
                   icon:
                       _isAnalyzing
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                          ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                           : const Icon(Icons.analytics),
-                  label: Text(_isAnalyzing ? 'Analyzing Audio...' : 'Analyze for Noise & Quality'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                  label: Text(
+                    _isAnalyzing
+                        ? 'Analyzing Audio...'
+                        : 'Analyze for Noise & Quality',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -93,7 +108,10 @@ class _NoiseDetectionWidgetState extends State<NoiseDetectionWidget> {
                   children: [
                     Icon(Icons.info_outline, color: Colors.grey),
                     SizedBox(width: 8),
-                    Text('Select an audio file to analyze noise and quality', style: TextStyle(color: Colors.grey)),
+                    Text(
+                      'Select an audio file to analyze noise and quality',
+                      style: TextStyle(color: Colors.grey),
+                    ),
                   ],
                 ),
               ),
@@ -113,7 +131,12 @@ class _NoiseDetectionWidgetState extends State<NoiseDetectionWidget> {
                   children: [
                     Icon(Icons.error_outline, color: Colors.red.shade600),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(_errorMessage!, style: TextStyle(color: Colors.red.shade700))),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(color: Colors.red.shade700),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -147,14 +170,23 @@ class _NoiseDetectionWidgetState extends State<NoiseDetectionWidget> {
           children: [
             const Icon(Icons.high_quality, color: Colors.blue),
             const SizedBox(width: 8),
-            const Text('Audio Quality Analysis', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const Text(
+              'Audio Quality Analysis',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
             const Spacer(),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: _getGradeColor(metrics.grade), borderRadius: BorderRadius.circular(16)),
+              decoration: BoxDecoration(
+                color: _getGradeColor(metrics.grade),
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Text(
                 metrics.grade.description,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
@@ -170,21 +202,41 @@ class _NoiseDetectionWidgetState extends State<NoiseDetectionWidget> {
           children: [
             _buildMetricTile('Peak Level', metrics.peakLevelFormatted),
             _buildMetricTile('Average Level', metrics.averageLevelFormatted),
-            _buildMetricTile('Dynamic Range', '${metrics.dynamicRange.toStringAsFixed(1)} dB'),
+            _buildMetricTile(
+              'Dynamic Range',
+              '${metrics.dynamicRange.toStringAsFixed(1)} dB',
+            ),
             _buildMetricTile('SNR', metrics.snrFormatted),
             _buildMetricTile('Loudness', metrics.lufsFormatted),
-            _buildMetricTile('Overall Score', '${(metrics.overallScore * 100).toStringAsFixed(0)}%'),
+            _buildMetricTile(
+              'Overall Score',
+              '${(metrics.overallScore * 100).toStringAsFixed(0)}%',
+            ),
           ],
         ),
-        if (metrics.hasClipping || metrics.hasDistortion || metrics.hasBalanceIssues) ...[
+        if (metrics.hasClipping ||
+            metrics.hasDistortion ||
+            metrics.hasBalanceIssues) ...[
           const SizedBox(height: 8),
-          const Text('Issues Detected:', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red)),
+          const Text(
+            'Issues Detected:',
+            style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red),
+          ),
           if (metrics.hasClipping)
-            const Text('⚠️ Audio clipping detected', style: TextStyle(color: Colors.red, fontSize: 12)),
+            const Text(
+              '⚠️ Audio clipping detected',
+              style: TextStyle(color: Colors.red, fontSize: 12),
+            ),
           if (metrics.hasDistortion)
-            const Text('⚠️ Distortion present', style: TextStyle(color: Colors.red, fontSize: 12)),
+            const Text(
+              '⚠️ Distortion present',
+              style: TextStyle(color: Colors.red, fontSize: 12),
+            ),
           if (metrics.hasBalanceIssues)
-            const Text('⚠️ Stereo balance issues', style: TextStyle(color: Colors.red, fontSize: 12)),
+            const Text(
+              '⚠️ Stereo balance issues',
+              style: TextStyle(color: Colors.red, fontSize: 12),
+            ),
         ],
       ],
     );
@@ -201,8 +253,16 @@ class _NoiseDetectionWidgetState extends State<NoiseDetectionWidget> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-          Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade600), textAlign: TextAlign.center),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          Text(
+            label,
+            style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
@@ -237,16 +297,28 @@ class _NoiseDetectionWidgetState extends State<NoiseDetectionWidget> {
               children: [
                 Row(
                   children: [
-                    Expanded(child: Text(noise.type.description, style: const TextStyle(fontWeight: FontWeight.bold))),
+                    Expanded(
+                      child: Text(
+                        noise.type.description,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: _getNoiseColor(noise.confidence),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
                         '${(noise.confidence * 100).toStringAsFixed(0)}%',
-                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
@@ -256,7 +328,10 @@ class _NoiseDetectionWidgetState extends State<NoiseDetectionWidget> {
                   'Confidence: ${(noise.confidence * 100).toStringAsFixed(1)}%',
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                 ),
-                Text('Found at: ${noise.timeRange}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                Text(
+                  'Found at: ${noise.timeRange}',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                ),
               ],
             ),
           ),
@@ -273,12 +348,17 @@ class _NoiseDetectionWidgetState extends State<NoiseDetectionWidget> {
           children: [
             Icon(Icons.equalizer, color: Colors.purple),
             SizedBox(width: 8),
-            Text('Frequency Analysis', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            Text(
+              'Frequency Analysis',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
           ],
         ),
         const SizedBox(height: 8),
         if (analysis.fundamentalFrequency != null)
-          Text('Fundamental Frequency: ${analysis.fundamentalFrequency!.toStringAsFixed(1)} Hz'),
+          Text(
+            'Fundamental Frequency: ${analysis.fundamentalFrequency!.toStringAsFixed(1)} Hz',
+          ),
         const SizedBox(height: 8),
         // Simple frequency bars visualization
         Row(
@@ -290,7 +370,9 @@ class _NoiseDetectionWidgetState extends State<NoiseDetectionWidget> {
                   color: Colors.red.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Center(child: Text('Bass', style: TextStyle(fontSize: 10))),
+                child: const Center(
+                  child: Text('Bass', style: TextStyle(fontSize: 10)),
+                ),
               ),
             ),
             const SizedBox(width: 4),
@@ -301,7 +383,9 @@ class _NoiseDetectionWidgetState extends State<NoiseDetectionWidget> {
                   color: Colors.green.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Center(child: Text('Mid', style: TextStyle(fontSize: 10))),
+                child: const Center(
+                  child: Text('Mid', style: TextStyle(fontSize: 10)),
+                ),
               ),
             ),
             const SizedBox(width: 4),
@@ -312,7 +396,9 @@ class _NoiseDetectionWidgetState extends State<NoiseDetectionWidget> {
                   color: Colors.blue.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Center(child: Text('Treble', style: TextStyle(fontSize: 10))),
+                child: const Center(
+                  child: Text('Treble', style: TextStyle(fontSize: 10)),
+                ),
               ),
             ),
           ],
@@ -321,9 +407,15 @@ class _NoiseDetectionWidgetState extends State<NoiseDetectionWidget> {
         Text('Characteristics: ${analysis.tonalCharacteristics.join(', ')}'),
         if (analysis.problematicBands.isNotEmpty) ...[
           const SizedBox(height: 8),
-          const Text('Problematic Frequency Bands:', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red)),
+          const Text(
+            'Problematic Frequency Bands:',
+            style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red),
+          ),
           ...analysis.problematicBands.map(
-            (band) => Text('• ${band.toString()}', style: const TextStyle(fontSize: 12, color: Colors.red)),
+            (band) => Text(
+              '• ${band.toString()}',
+              style: const TextStyle(fontSize: 12, color: Colors.red),
+            ),
           ),
         ],
       ],

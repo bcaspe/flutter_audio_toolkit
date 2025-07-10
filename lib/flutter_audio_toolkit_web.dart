@@ -80,13 +80,19 @@ class FlutterAudioToolkitWeb extends FlutterAudioToolkitPlatform {
         // Add envelope for natural audio characteristics
         final envelope = _calculateEnvelope(timeRatio);
 
-        final amplitude = ((wave1 + wave2 + wave3 + noise) * envelope + 0.5).clamp(0.0, 1.0);
+        final amplitude = ((wave1 + wave2 + wave3 + noise) * envelope + 0.5)
+            .clamp(0.0, 1.0);
         amplitudes.add(amplitude);
       }
 
       onProgress?.call(1.0);
 
-      return WaveformData(amplitudes: amplitudes, durationMs: duration, sampleRate: 44100, channels: 2);
+      return WaveformData(
+        amplitudes: amplitudes,
+        durationMs: duration,
+        sampleRate: 44100,
+        channels: 2,
+      );
     } catch (e) {
       throw Exception('Failed to extract waveform on web: $e');
     }
@@ -178,7 +184,11 @@ class FlutterAudioToolkitWeb extends FlutterAudioToolkitPlatform {
             ),
       );
     } catch (e) {
-      return AudioInfo(isValid: false, error: 'Failed to get audio info on web', details: e.toString());
+      return AudioInfo(
+        isValid: false,
+        error: 'Failed to get audio info on web',
+        details: e.toString(),
+      );
     }
   }
 

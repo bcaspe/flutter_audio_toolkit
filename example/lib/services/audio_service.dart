@@ -10,112 +10,96 @@ import 'validation_service.dart';
 class AudioService {
   static final FlutterAudioToolkit _audioToolkit = FlutterAudioToolkit();
 
-  /// Gets the appropriate output directory for the current platform
+  /// Gets the output directory for saving processed files
   static Future<Directory> getOutputDirectory() async {
     if (Platform.isAndroid) {
       try {
-        // For Android, try to use Downloads directory first (most user-accessible)
-        final directory = await getExternalStorageDirectory();
-        if (directory != null) {
-          // Navigate to the public Downloads folder
-          // This is more accessible to users across different Android versions
-          final publicPath = directory.path.replaceAll(
-            '/Android/data/${directory.path.split('/')[4]}/files',
-            '/Download',
+        // Try to use the Downloads folder on Android 10+ (API 29+)
+        final downloadsDirectory = await getExternalStorageDirectory();
+        if (downloadsDirectory != null) {
+          final audioDirectory = Directory(
+            '${downloadsDirectory.path}/AudioToolkit',
           );
-          final downloadsDirectory = Directory('$publicPath/AudioToolkit');
-
-          try {
-            if (!await downloadsDirectory.exists()) {
-              await downloadsDirectory.create(recursive: true);
-            }
-
-            if (kDebugMode) {
-              print('Using Android Downloads folder: ${downloadsDirectory.path}');
-              print('Files will be accessible via Downloads folder in file manager');
-            }
-
-            return downloadsDirectory;
-          } catch (e) {
-            if (kDebugMode) {
-              print('Could not access Downloads folder: $e, falling back to app storage');
-            }
-          }
-        }
-
-        // Fallback: Use the app's external storage directory with clearer folder structure
-        if (directory != null) {
-          final audioDirectory = Directory('${directory.path}/AudioFiles');
           if (!await audioDirectory.exists()) {
             await audioDirectory.create(recursive: true);
           }
-
+          // Keep this print as it's helpful for users to know where files are saved
           if (kDebugMode) {
-            print('Using Android app storage: ${audioDirectory.path}');
+            print('Using Android Downloads folder: ${downloadsDirectory.path}');
           }
-
           return audioDirectory;
         }
       } catch (e) {
+        // Fallback to app storage
         if (kDebugMode) {
-          print('Error setting up Android storage: $e');
+          print(
+            'Could not access Downloads folder: $e, falling back to app storage',
+          );
         }
       }
 
-      // Final fallback: app documents directory
-      return await getApplicationDocumentsDirectory();
+      // Fallback to app-specific directory
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        final audioDirectory = Directory('${appDir.path}/AudioToolkit');
+        if (!await audioDirectory.exists()) {
+          await audioDirectory.create(recursive: true);
+        }
+        if (kDebugMode) {
+          print('Using Android app storage: ${audioDirectory.path}');
+        }
+        return audioDirectory;
+      } catch (e) {
+        // Final fallback - use temp directory
+        if (kDebugMode) {
+          print('Error setting up Android storage: $e');
+        }
+        final tempDir = await getTemporaryDirectory();
+        return tempDir;
+      }
     } else if (Platform.isIOS) {
-      // iOS: Use documents directory (accessible via Files app)
-      final directory = await getApplicationDocumentsDirectory();
-      final audioDirectory = Directory('${directory.path}/AudioFiles');
-
+      // On iOS, use the Documents directory
+      final documentsDir = await getApplicationDocumentsDirectory();
+      final audioDirectory = Directory('${documentsDir.path}/AudioToolkit');
       if (!await audioDirectory.exists()) {
         await audioDirectory.create(recursive: true);
       }
-
       if (kDebugMode) {
         print('Using iOS Documents directory: ${audioDirectory.path}');
       }
-
       return audioDirectory;
     } else {
-      // Other platforms: use documents directory
-      return await getApplicationDocumentsDirectory();
+      // For other platforms, use the temp directory
+      final tempDir = await getTemporaryDirectory();
+      return tempDir;
     }
   }
 
-  /// Gets a user-friendly description of where files are stored
+  /// Gets a user-friendly description of the output location
   static Future<String> getOutputLocationDescription() async {
-    final directory = await getOutputDirectory();
-
     if (Platform.isAndroid) {
-      if (directory.path.contains('/Download/AudioToolkit')) {
-        return 'Files are saved in your Downloads folder: .';
-      } else if (directory.path.contains('Android/data')) {
-        return 'Files are saved in the app folder:\\n${directory.path}';
-      } else {
-        return 'Files are saved in your device storage:\\n${directory.path}.';
-      }
+      return 'Files are saved in your device\'s Downloads → AudioToolkit folder';
     } else if (Platform.isIOS) {
-      return 'Files are saved in the app folder, accessible via the Files app.\\n\\nTo access: Open Files app → On My iPhone → flutter_audio_toolkit_example';
+      return 'Files are saved in the app\'s Documents folder. You can access them via the Files app or share them directly from the app.';
     } else {
-      return 'Files are saved in: ${directory.path}';
+      return 'Files are saved in the app\'s temporary storage.';
     }
   }
 
-  /// Gets platform version using the new API
-  static Future<String> getPlatformVersion(AppState appState) async {
+  /// Gets the platform version
+  static Future<void> getPlatformVersion(AppState appState) async {
     try {
-      return await _audioToolkit.getPlatformVersion() ?? 'Unknown platform version';
+      appState.platformVersion =
+          await _audioToolkit.getPlatformVersion() ?? 'Unknown';
     } catch (e) {
       if (kDebugMode) {
         print('Failed to get platform version: $e');
       }
-      return 'Failed to get platform version.';
+      appState.platformVersion = 'Error: $e';
     }
   }
 
-  /// Gets audio file information using the new API
+  /// Gets audio file information
   static Future<void> getAudioInfo(AppState appState) async {
     if (appState.selectedFilePath == null) return;
 
@@ -123,9 +107,8 @@ class AudioService {
       final info = await _audioToolkit.getAudioInfo(appState.selectedFilePath!);
       appState.audioInfo = info;
 
-      // Set default trim range to full audio duration if available
+      // Set default trim end time to full duration
       if (info.durationMs != null) {
-        appState.trimStartMs = 0;
         appState.trimEndMs = info.durationMs!;
       }
 
@@ -136,59 +119,53 @@ class AudioService {
       if (kDebugMode) {
         print('Failed to get audio info: $e');
       }
-      // Set empty audio info on error
       appState.audioInfo = null;
     }
   }
 
-  /// Converts audio to specified format using the new simplified API
-  static Future<void> convertAudio(
-    AppState appState,
-    AudioFormat format, {
-    int bitRate = 192, // Default to high quality
-    int sampleRate = 44100,
-  }) async {
-    // Perform comprehensive validations
+  /// Converts audio using the new simplified API
+  static Future<void> convertAudio(AppState appState) async {
     if (!await ValidationService.validateSelectedFile(appState)) return;
-    if (!await ValidationService.validateFormatSupport(appState)) return;
     if (!await ValidationService.validateStoragePermissions()) return;
 
     appState.isConverting = true;
     appState.conversionProgress = 0.0;
 
     try {
-      // Get appropriate output directory for the platform
       final directory = await getOutputDirectory();
       if (!await directory.exists()) {
         await directory.create(recursive: true);
       }
 
-      // Determine file extension based on format
+      final format = appState.selectedConversionFormat;
       String fileExtension;
       switch (format) {
         case AudioFormat.m4a:
           fileExtension = 'm4a';
           break;
-        case AudioFormat.copy:
-          // Use original extension for copy
-          final inputFile = File(appState.selectedFilePath!);
-          fileExtension = inputFile.path.split('.').last.toLowerCase();
+        default:
+          // Default to m4a for any other format
+          fileExtension = 'm4a';
           break;
       }
 
-      final fileName = 'converted_audio_${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
+      final fileName =
+          'converted_audio_${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
       final outputPath = '${directory.path}/$fileName';
-      // Use the new simplified API
       final result = await _audioToolkit.convertAudio(
         inputPath: appState.selectedFilePath!,
         outputPath: outputPath,
         format: format,
-        bitRate: bitRate,
-        sampleRate: sampleRate,
+        bitRate: appState.selectedBitRate,
+        sampleRate: 44100, // Use standard sample rate
         onProgress: (progress) {
           appState.conversionProgress = progress;
-          if (kDebugMode && (progress == 0.0 || progress >= 1.0 || progress % 0.1 < 0.01)) {
-            debugPrint('Conversion progress: ${(progress * 100).toStringAsFixed(1)}%');
+          // Only log at 10% intervals to reduce log spam
+          if (kDebugMode &&
+              (progress == 0.0 || progress >= 1.0 || progress % 0.1 < 0.01)) {
+            debugPrint(
+              'Conversion progress: ${(progress * 100).toStringAsFixed(1)}%',
+            );
           }
         },
       );
@@ -230,9 +207,11 @@ class AudioService {
       final format = appState.trimFormat;
       const fileExtension = 'm4a';
 
-      final fileName = 'trimmed_audio_${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
+      final fileName =
+          'trimmed_audio_${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
       final outputPath = '${directory.path}/$fileName';
 
+      // Keep this detailed logging as it's helpful for debugging trim issues
       if (kDebugMode) {
         print('🎵 Trimming audio file:');
         print('  • Format: M4A with AAC codec');
@@ -243,7 +222,9 @@ class AudioService {
         print(
           '  • Trim range: ${(appState.trimStartMs / 1000).toStringAsFixed(1)}s - ${(appState.trimEndMs / 1000).toStringAsFixed(1)}s',
         );
-        print('  • Duration: ${((appState.trimEndMs - appState.trimStartMs) / 1000).toStringAsFixed(1)}s');
+        print(
+          '  • Duration: ${((appState.trimEndMs - appState.trimStartMs) / 1000).toStringAsFixed(1)}s',
+        );
       }
 
       final result = await _audioToolkit.trimAudio(
@@ -256,8 +237,12 @@ class AudioService {
         sampleRate: 44100,
         onProgress: (progress) {
           appState.trimProgress = progress;
-          if (kDebugMode && (progress == 0.0 || progress >= 1.0 || progress % 0.1 < 0.01)) {
-            debugPrint('Trim progress: ${(progress * 100).toStringAsFixed(1)}%');
+          // Only log at 10% intervals to reduce log spam
+          if (kDebugMode &&
+              (progress == 0.0 || progress >= 1.0 || progress % 0.1 < 0.01)) {
+            debugPrint(
+              'Trim progress: ${(progress * 100).toStringAsFixed(1)}%',
+            );
           }
         },
       );
@@ -268,7 +253,9 @@ class AudioService {
       if (kDebugMode) {
         print('✅ Audio trimming completed successfully:');
         print('  • Output file: ${result.outputPath}');
-        print('  • Duration: ${(result.durationMs / 1000).toStringAsFixed(1)}s');
+        print(
+          '  • Duration: ${(result.durationMs / 1000).toStringAsFixed(1)}s',
+        );
         print('  • Actual bitrate: ${result.bitRate} kbps');
         print('  • Sample rate: ${result.sampleRate} Hz');
         print('  • File size: ${await File(result.outputPath).length()} bytes');
@@ -299,8 +286,11 @@ class AudioService {
         samplesPerSecond: 100,
         onProgress: (progress) {
           appState.waveformProgress = progress;
-          if (kDebugMode && (progress == 0.0 || progress >= 1.0 || progress % 0.1 < 0.01)) {
-            debugPrint('Waveform extraction progress: ${(progress * 100).toStringAsFixed(1)}%');
+          if (kDebugMode &&
+              (progress == 0.0 || progress >= 1.0 || progress % 0.1 < 0.01)) {
+            debugPrint(
+              'Waveform extraction progress: ${(progress * 100).toStringAsFixed(1)}%',
+            );
           }
         },
       );
@@ -326,7 +316,9 @@ class AudioService {
   /// Generates fake waveform data for testing
   static void generateFakeWaveform(AppState appState) {
     if (kDebugMode) {
-      print('Generating fake waveform with pattern: ${appState.selectedWaveformPattern.name}');
+      print(
+        'Generating fake waveform with pattern: ${appState.selectedWaveformPattern.name}',
+      );
     }
 
     try {
@@ -368,8 +360,11 @@ class AudioService {
         inputPath: appState.selectedFilePath!,
         onProgress: (progress) {
           appState.noiseAnalysisProgress = progress;
-          if (kDebugMode && (progress == 0.0 || progress >= 1.0 || progress % 0.1 < 0.01)) {
-            debugPrint('Noise analysis progress: ${(progress * 100).toStringAsFixed(1)}%');
+          if (kDebugMode &&
+              (progress == 0.0 || progress >= 1.0 || progress % 0.1 < 0.01)) {
+            debugPrint(
+              'Noise analysis progress: ${(progress * 100).toStringAsFixed(1)}%',
+            );
           }
         },
       );
@@ -399,7 +394,8 @@ class AudioService {
       // Generate output filename from URL
       final uri = Uri.parse(url);
       final originalName = uri.pathSegments.last;
-      final fileName = 'downloaded_${DateTime.now().millisecondsSinceEpoch}_$originalName';
+      final fileName =
+          'downloaded_${DateTime.now().millisecondsSinceEpoch}_$originalName';
       final outputPath = '${directory.path}/$fileName';
 
       if (kDebugMode) {
@@ -412,8 +408,11 @@ class AudioService {
         outputPath,
         onProgress: (progress) {
           appState.downloadProgress = progress;
-          if (kDebugMode && (progress == 0.0 || progress >= 1.0 || progress % 0.1 < 0.01)) {
-            debugPrint('Download progress: ${(progress * 100).toStringAsFixed(1)}%');
+          if (kDebugMode &&
+              (progress == 0.0 || progress >= 1.0 || progress % 0.1 < 0.01)) {
+            debugPrint(
+              'Download progress: ${(progress * 100).toStringAsFixed(1)}%',
+            );
           }
         },
       );

@@ -8,18 +8,27 @@ class TrimmingWidget extends StatelessWidget {
   final AppState appState;
   final VoidCallback onStateChanged;
 
-  const TrimmingWidget({super.key, required this.appState, required this.onStateChanged});
+  const TrimmingWidget({
+    super.key,
+    required this.appState,
+    required this.onStateChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     if (appState.audioInfo == null) {
       return const Card(
-        child: Padding(padding: EdgeInsets.all(16.0), child: Text('Load an audio file to enable trimming')),
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Text('Load an audio file to enable trimming'),
+        ),
       );
     }
 
     // Set default trim range if not set
-    if (appState.trimStartMs == 0 && appState.trimEndMs == 0 && appState.audioInfo!.durationMs != null) {
+    if (appState.trimStartMs == 0 &&
+        appState.trimEndMs == 0 &&
+        appState.audioInfo!.durationMs != null) {
       appState.trimEndMs = appState.audioInfo!.durationMs!;
       onStateChanged();
     }
@@ -30,7 +39,10 @@ class TrimmingWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('✂️ Audio Trimming', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text(
+              '✂️ Audio Trimming',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             const Text(
               'Trim your audio file to a specific time range. The trimmed file will be saved in M4A format for best compatibility.',
@@ -38,7 +50,8 @@ class TrimmingWidget extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            if (appState.audioInfo != null && appState.audioInfo!.durationMs != null) ...[
+            if (appState.audioInfo != null &&
+                appState.audioInfo!.durationMs != null) ...[
               // Trim range controls
               const Text('Start Time (seconds):'),
               Slider(
@@ -53,7 +66,10 @@ class TrimmingWidget extends StatelessWidget {
 
                   // Ensure end time maintains minimum 1 second gap
                   if (appState.trimEndMs <= appState.trimStartMs) {
-                    appState.trimEndMs = (appState.trimStartMs + 1000).clamp(1000, durationMs);
+                    appState.trimEndMs = (appState.trimStartMs + 1000).clamp(
+                      1000,
+                      durationMs,
+                    );
                   }
                   onStateChanged();
                 },
@@ -72,7 +88,10 @@ class TrimmingWidget extends StatelessWidget {
 
                   // Ensure start time maintains minimum 1 second gap
                   if (appState.trimStartMs >= appState.trimEndMs) {
-                    appState.trimStartMs = (appState.trimEndMs - 1000).clamp(0, durationMs - 1000);
+                    appState.trimStartMs = (appState.trimEndMs - 1000).clamp(
+                      0,
+                      durationMs - 1000,
+                    );
                   }
                   onStateChanged();
                 },
@@ -120,7 +139,9 @@ class TrimmingWidget extends StatelessWidget {
             // Trim button
             ElevatedButton(
               onPressed:
-                  (appState.isTrimming || appState.selectedFilePath == null || appState.audioInfo == null)
+                  (appState.isTrimming ||
+                          appState.selectedFilePath == null ||
+                          appState.audioInfo == null)
                       ? null
                       : _trimAudio,
               child: const Text('Trim Audio'),
@@ -131,25 +152,33 @@ class TrimmingWidget extends StatelessWidget {
               const SizedBox(height: 16),
               LinearProgressIndicator(value: appState.trimProgress),
               const SizedBox(height: 8),
-              Text('Trimming: ${(appState.trimProgress * 100).toStringAsFixed(1)}%'),
+              Text(
+                'Trimming: ${(appState.trimProgress * 100).toStringAsFixed(1)}%',
+              ),
             ],
 
             // Trimmed file info and playback
             if (appState.trimmedFilePath != null) ...[
               const SizedBox(height: 16),
-              Text('Trimmed file: ${appState.trimmedFilePath!.split('/').last}'),
+              Text(
+                'Trimmed file: ${appState.trimmedFilePath!.split('/').last}',
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
                   ElevatedButton(
                     onPressed: () => _playTrimmedFile(context),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                    ),
                     child: const Text('Play Trimmed Audio'),
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
                     onPressed: () => _showFileLocation(context),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                    ),
                     child: const Text('Show File Location'),
                   ),
                 ],
@@ -174,7 +203,9 @@ class TrimmingWidget extends StatelessWidget {
       // Show a snackbar to indicate playback
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Playing trimmed file: ${appState.trimmedFilePath!.split('/').last}'),
+          content: Text(
+            'Playing trimmed file: ${appState.trimmedFilePath!.split('/').last}',
+          ),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 2),
         ),
@@ -186,7 +217,8 @@ class TrimmingWidget extends StatelessWidget {
 
   Future<void> _showFileLocation(BuildContext context) async {
     if (appState.trimmedFilePath != null) {
-      final locationDescription = await AudioService.getOutputLocationDescription();
+      final locationDescription =
+          await AudioService.getOutputLocationDescription();
       final fileName = appState.trimmedFilePath!.split('/').last;
       final fullPath = appState.trimmedFilePath!;
 
@@ -203,7 +235,10 @@ class TrimmingWidget extends StatelessWidget {
                   children: [
                     const Text(
                       'Your trimmed audio file has been saved!',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Text('📄 File name: $fileName'),
@@ -222,32 +257,61 @@ class TrimmingWidget extends StatelessWidget {
                         children: [
                           const Text(
                             '💡 Quick Tips:',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue,
+                            ),
                           ),
                           const SizedBox(height: 8),
-                          const Text('• Open your device\'s file manager app', style: TextStyle(fontSize: 12)),
-                          const Text('• Look for "Downloads" or "AudioToolkit" folder', style: TextStyle(fontSize: 12)),
-                          const Text('• Search for the file name above if needed', style: TextStyle(fontSize: 12)),
-                          const Text('• Files are compatible with most audio players', style: TextStyle(fontSize: 12)),
+                          const Text(
+                            '• Open your device\'s file manager app',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          const Text(
+                            '• Look for "Downloads" or "AudioToolkit" folder',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          const Text(
+                            '• Search for the file name above if needed',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          const Text(
+                            '• Files are compatible with most audio players',
+                            style: TextStyle(fontSize: 12),
+                          ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 12),
                     ExpansionTile(
-                      title: const Text('🔧 Full Path (Advanced)', style: TextStyle(fontSize: 14)),
+                      title: const Text(
+                        '🔧 Full Path (Advanced)',
+                        style: TextStyle(fontSize: 14),
+                      ),
                       children: [
-                        SelectableText(fullPath, style: const TextStyle(fontSize: 11, fontFamily: 'monospace')),
+                        SelectableText(
+                          fullPath,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
                       ],
                     ),
                   ],
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Got it!')),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Got it!'),
+                ),
                 if (Platform.isAndroid)
                   ElevatedButton(
                     onPressed: () => _openFileManager(context),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                    ),
                     child: const Text('Open File Manager'),
                   ),
               ],
@@ -263,7 +327,9 @@ class TrimmingWidget extends StatelessWidget {
     // android_intent_plus to open the file manager directly
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Please open your device\'s file manager app and navigate to Downloads → AudioToolkit'),
+        content: Text(
+          'Please open your device\'s file manager app and navigate to Downloads → AudioToolkit',
+        ),
         duration: Duration(seconds: 4),
         backgroundColor: Colors.blue,
       ),

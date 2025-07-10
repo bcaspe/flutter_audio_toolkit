@@ -12,30 +12,32 @@ void main() {
     });
 
     tearDown(() {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
     });
 
-    testWidgets('convertAudio receives bitRate in kbps and returns kbps', (WidgetTester tester) async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
-        MethodCall methodCall,
-      ) async {
-        if (methodCall.method == 'convertAudio') {
-          final args = methodCall.arguments as Map;
-          final bitRate = args['bitRate'] as int;
+    testWidgets('convertAudio receives bitRate in kbps and returns kbps', (
+      WidgetTester tester,
+    ) async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
+            if (methodCall.method == 'convertAudio') {
+              final args = methodCall.arguments as Map;
+              final bitRate = args['bitRate'] as int;
 
-          // Dart sends bitRate in kbps (e.g., 192)
-          expect(bitRate, equals(192));
+              // Dart sends bitRate in kbps (e.g., 192)
+              expect(bitRate, equals(192));
 
-          // Mock platform returns bitRate in kbps for consistency
-          return {
-            'outputPath': args['outputPath'],
-            'durationMs': 30000,
-            'bitRate': 192, // Return in kbps for Dart consistency
-            'sampleRate': args['sampleRate'],
-          };
-        }
-        return null;
-      });
+              // Mock platform returns bitRate in kbps for consistency
+              return {
+                'outputPath': args['outputPath'],
+                'durationMs': 30000,
+                'bitRate': 192, // Return in kbps for Dart consistency
+                'sampleRate': args['sampleRate'],
+              };
+            }
+            return null;
+          });
 
       final result = await audioToolkit.convertAudio(
         inputPath: '/test/input.wav',
@@ -50,27 +52,28 @@ void main() {
       expect(result.sampleRate, 44100);
     });
 
-    testWidgets('trimAudio receives bitRate in kbps and returns kbps', (WidgetTester tester) async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
-        MethodCall methodCall,
-      ) async {
-        if (methodCall.method == 'trimAudio') {
-          final args = methodCall.arguments as Map;
-          final bitRate = args['bitRate'] as int;
+    testWidgets('trimAudio receives bitRate in kbps and returns kbps', (
+      WidgetTester tester,
+    ) async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
+            if (methodCall.method == 'trimAudio') {
+              final args = methodCall.arguments as Map;
+              final bitRate = args['bitRate'] as int;
 
-          // Dart sends bitRate in kbps (e.g., 128)
-          expect(bitRate, equals(128));
+              // Dart sends bitRate in kbps (e.g., 128)
+              expect(bitRate, equals(128));
 
-          // Mock platform returns bitRate in kbps for consistency
-          return {
-            'outputPath': args['outputPath'],
-            'durationMs': 15000,
-            'bitRate': 128, // Return in kbps for Dart consistency
-            'sampleRate': args['sampleRate'],
-          };
-        }
-        return null;
-      });
+              // Mock platform returns bitRate in kbps for consistency
+              return {
+                'outputPath': args['outputPath'],
+                'durationMs': 15000,
+                'bitRate': 128, // Return in kbps for Dart consistency
+                'sampleRate': args['sampleRate'],
+              };
+            }
+            return null;
+          });
 
       final result = await audioToolkit.trimAudio(
         inputPath: '/test/input.wav',
@@ -87,26 +90,27 @@ void main() {
       expect(result.sampleRate, 44100);
     });
 
-    testWidgets('high quality bitRate 320 kbps works correctly', (WidgetTester tester) async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
-        MethodCall methodCall,
-      ) async {
-        if (methodCall.method == 'convertAudio') {
-          final args = methodCall.arguments as Map;
-          final bitRate = args['bitRate'] as int;
+    testWidgets('high quality bitRate 320 kbps works correctly', (
+      WidgetTester tester,
+    ) async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
+            if (methodCall.method == 'convertAudio') {
+              final args = methodCall.arguments as Map;
+              final bitRate = args['bitRate'] as int;
 
-          // High quality: 320 kbps
-          expect(bitRate, equals(320));
+              // High quality: 320 kbps
+              expect(bitRate, equals(320));
 
-          return {
-            'outputPath': args['outputPath'],
-            'durationMs': 240000, // 4 minutes
-            'bitRate': 320, // Return in kbps
-            'sampleRate': args['sampleRate'],
-          };
-        }
-        return null;
-      });
+              return {
+                'outputPath': args['outputPath'],
+                'durationMs': 240000, // 4 minutes
+                'bitRate': 320, // Return in kbps
+                'sampleRate': args['sampleRate'],
+              };
+            }
+            return null;
+          });
 
       final result = await audioToolkit.convertAudio(
         inputPath: '/test/large_input.wav',

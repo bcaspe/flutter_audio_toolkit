@@ -17,7 +17,9 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
 
   @override
   Future<String?> getPlatformVersion() async {
-    final version = await methodChannel.invokeMethod<String>('getPlatformVersion');
+    final version = await methodChannel.invokeMethod<String>(
+      'getPlatformVersion',
+    );
     return version;
   }
 
@@ -58,7 +60,9 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
         'sampleRate': sampleRate,
       };
 
-      final result = await methodChannel.invokeMethod('convertAudio', arguments).timeout(const Duration(minutes: 10));
+      final result = await methodChannel
+          .invokeMethod('convertAudio', arguments)
+          .timeout(const Duration(minutes: 10));
 
       if (result == null) {
         throw AudioConversionException(
@@ -149,7 +153,9 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
         'sampleRate': sampleRate,
       };
 
-      final result = await methodChannel.invokeMethod('trimAudio', arguments).timeout(const Duration(minutes: 10));
+      final result = await methodChannel
+          .invokeMethod('trimAudio', arguments)
+          .timeout(const Duration(minutes: 10));
 
       if (result == null) {
         throw AudioTrimmingException(
@@ -226,9 +232,14 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
     }
 
     try {
-      final Map<String, dynamic> arguments = {'inputPath': inputPath, 'samplesPerSecond': samplesPerSecond};
+      final Map<String, dynamic> arguments = {
+        'inputPath': inputPath,
+        'samplesPerSecond': samplesPerSecond,
+      };
 
-      final result = await methodChannel.invokeMethod('extractWaveform', arguments).timeout(const Duration(minutes: 5));
+      final result = await methodChannel
+          .invokeMethod('extractWaveform', arguments)
+          .timeout(const Duration(minutes: 5));
 
       if (result == null) {
         throw WaveformExtractionException(
@@ -251,7 +262,8 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
       }
 
       return WaveformData(
-        amplitudes: (convertedResult['amplitudes'] as List<dynamic>).cast<double>(),
+        amplitudes:
+            (convertedResult['amplitudes'] as List<dynamic>).cast<double>(),
         sampleRate: convertedResult['sampleRate'] as int,
         durationMs: convertedResult['durationMs'] as int,
         channels: convertedResult['channels'] as int,
@@ -284,7 +296,10 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
           .timeout(const Duration(seconds: 30));
 
       if (result == null) {
-        throw AudioAnalysisException('Audio analysis failed: No result returned from platform', inputPath: inputPath);
+        throw AudioAnalysisException(
+          'Audio analysis failed: No result returned from platform',
+          inputPath: inputPath,
+        );
       }
 
       // Safely convert the result to Map<String, dynamic>
@@ -292,14 +307,23 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
       if (result is Map) {
         convertedResult = Map<String, dynamic>.from(result);
       } else {
-        throw AudioAnalysisException('Audio analysis failed: Invalid result type from platform', inputPath: inputPath);
+        throw AudioAnalysisException(
+          'Audio analysis failed: Invalid result type from platform',
+          inputPath: inputPath,
+        );
       }
 
       return AudioInfo.fromMap(convertedResult);
     } on PlatformException catch (e) {
-      throw _convertPlatformException(e, AudioAnalysisException.new, {'inputPath': inputPath});
+      throw _convertPlatformException(e, AudioAnalysisException.new, {
+        'inputPath': inputPath,
+      });
     } catch (e) {
-      throw AudioAnalysisException('Audio analysis failed: $e', originalError: e, inputPath: inputPath);
+      throw AudioAnalysisException(
+        'Audio analysis failed: $e',
+        originalError: e,
+        inputPath: inputPath,
+      );
     }
   }
 
@@ -317,7 +341,9 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
       if (e.code == 'PLATFORM_NOT_SUPPORTED') {
         return false;
       }
-      throw _convertPlatformException(e, AudioAnalysisException.new, {'inputPath': inputPath});
+      throw _convertPlatformException(e, AudioAnalysisException.new, {
+        'inputPath': inputPath,
+      });
     } catch (e) {
       return false;
     }
@@ -346,7 +372,10 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
     }
 
     try {
-      final Map<String, dynamic> arguments = {'inputPath': inputPath, 'sensitivityLevel': sensitivityLevel};
+      final Map<String, dynamic> arguments = {
+        'inputPath': inputPath,
+        'sensitivityLevel': sensitivityLevel,
+      };
 
       final result = await methodChannel
           .invokeMethod('analyzeAudioNoise', arguments)
@@ -436,7 +465,10 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
     }
 
     try {
-      final Map<String, dynamic> arguments = {'url': url, 'localPath': localPath};
+      final Map<String, dynamic> arguments = {
+        'url': url,
+        'localPath': localPath,
+      };
 
       final result = await methodChannel
           .invokeMethod<String>('downloadAudioFromUrl', arguments)
@@ -452,22 +484,33 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
 
       return result;
     } on PlatformException catch (e) {
-      throw _convertPlatformException(e, NetworkAudioException.new, {'url': url, 'localPath': localPath});
+      throw _convertPlatformException(e, NetworkAudioException.new, {
+        'url': url,
+        'localPath': localPath,
+      });
     } catch (e) {
-      throw NetworkAudioException('Download failed: $e', originalError: e, url: url, localPath: localPath);
+      throw NetworkAudioException(
+        'Download failed: $e',
+        originalError: e,
+        url: url,
+        localPath: localPath,
+      );
     } finally {
       await progressSub?.cancel();
     }
   }
 
   @override
-  Future<bool> configureAudioSession({Map<String, dynamic>? configuration}) async {
+  Future<bool> configureAudioSession({
+    Map<String, dynamic>? configuration,
+  }) async {
     try {
       final result = await methodChannel
           .invokeMethod<bool>('configureAudioSession', configuration ?? {})
           .timeout(const Duration(seconds: 10));
 
-      return result ?? true; // Default to success for platforms that don't need it
+      return result ??
+          true; // Default to success for platforms that don't need it
     } on PlatformException catch (e) {
       if (e.code == 'PLATFORM_NOT_SUPPORTED') {
         return true; // Audio session configuration is not needed on this platform
@@ -479,7 +522,10 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
         originalError: e,
       );
     } catch (e) {
-      throw AudioAnalysisException('Audio session configuration failed: $e', originalError: e);
+      throw AudioAnalysisException(
+        'Audio session configuration failed: $e',
+        originalError: e,
+      );
     }
   }
 
@@ -507,7 +553,17 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
   }
 
   void _validateSampleRate(int sampleRate) {
-    const validRates = [8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000];
+    const validRates = [
+      8000,
+      11025,
+      16000,
+      22050,
+      32000,
+      44100,
+      48000,
+      88200,
+      96000,
+    ];
     if (!validRates.contains(sampleRate)) {
       throw InvalidArgumentsException(
         'Sample rate must be one of: ${validRates.join(', ')}',
@@ -563,7 +619,8 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
   // Helper to convert platform exceptions to domain exceptions
   T _convertPlatformException<T extends FlutterAudioToolkitException>(
     PlatformException e,
-    T Function(String, {String? details, String? code, dynamic originalError}) constructor,
+    T Function(String, {String? details, String? code, dynamic originalError})
+    constructor,
     Map<String, dynamic> additionalData,
   ) {
     String message = e.message ?? 'Unknown platform error';
@@ -596,6 +653,11 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
             as T;
     }
 
-    return constructor(message, details: e.details?.toString(), code: e.code, originalError: e);
+    return constructor(
+      message,
+      details: e.details?.toString(),
+      code: e.code,
+      originalError: e,
+    );
   }
 }

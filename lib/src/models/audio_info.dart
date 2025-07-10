@@ -122,7 +122,8 @@ class AudioInfo {
       bitDepth: map['bitDepth'] as int?,
       supportedForConversion: map['supportedForConversion'] as bool? ?? false,
       supportedForTrimming: map['supportedForTrimming'] as bool? ?? false,
-      supportedForLosslessTrimming: map['supportedForLosslessTrimming'] as bool? ?? false,
+      supportedForLosslessTrimming:
+          map['supportedForLosslessTrimming'] as bool? ?? false,
       supportedForWaveform: map['supportedForWaveform'] as bool? ?? false,
       title: map['title'] as String?,
       artist: map['artist'] as String?,

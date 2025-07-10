@@ -149,7 +149,10 @@ class ExampleAudioPlayerService {
     try {
       // Extract real waveform data in background
       final toolkit = FlutterAudioToolkit();
-      final waveformData = await toolkit.extractWaveform(inputPath: audioPath, samplesPerSecond: 100);
+      final waveformData = await toolkit.extractWaveform(
+        inputPath: audioPath,
+        samplesPerSecond: 100,
+      );
       _waveformData = waveformData;
     } catch (e) {
       // Failed to extract waveform data
@@ -169,7 +172,8 @@ class ExampleAudioPlayerService {
       final toolkit = FlutterAudioToolkit();
       final fakeWaveform = toolkit.generateFakeWaveform(
         pattern: pattern,
-        durationMs: _duration.inMilliseconds > 0 ? _duration.inMilliseconds : 180000,
+        durationMs:
+            _duration.inMilliseconds > 0 ? _duration.inMilliseconds : 180000,
         samplesPerSecond: samplesPerSecond,
       );
       _waveformData = fakeWaveform;
@@ -220,7 +224,12 @@ class ExampleAudioPlayerService {
     if (_isDisposed) throw StateError('Player has been disposed');
 
     try {
-      final clampedPosition = Duration(milliseconds: position.inMilliseconds.clamp(0, _duration.inMilliseconds));
+      final clampedPosition = Duration(
+        milliseconds: position.inMilliseconds.clamp(
+          0,
+          _duration.inMilliseconds,
+        ),
+      );
       await _audioPlayer.seek(clampedPosition);
     } catch (e) {
       _notifyErrorCallbacks('Failed to seek: $e');

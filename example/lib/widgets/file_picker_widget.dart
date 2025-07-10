@@ -11,7 +11,11 @@ class FilePickerWidget extends StatelessWidget {
   final AppState appState;
   final VoidCallback onError;
 
-  const FilePickerWidget({super.key, required this.appState, required this.onError});
+  const FilePickerWidget({
+    super.key,
+    required this.appState,
+    required this.onError,
+  });
 
   Future<void> _pickAudioFile() async {
     if (kDebugMode) {
@@ -33,7 +37,8 @@ class FilePickerWidget extends StatelessWidget {
           print('Trying fallback permission validation...');
         }
         // Fallback to direct validation that bypasses permission_handler
-        permissionsOk = await ValidationService.validateStoragePermissionsDirectly();
+        permissionsOk =
+            await ValidationService.validateStoragePermissionsDirectly();
       }
 
       if (!permissionsOk) {
@@ -64,19 +69,27 @@ class FilePickerWidget extends StatelessWidget {
 
         try {
           // Fallback to audio file type
-          result = await FilePicker.platform.pickFiles(type: FileType.audio, allowMultiple: false);
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.audio,
+            allowMultiple: false,
+          );
         } catch (e2) {
           if (kDebugMode) {
             print('Audio file type failed, trying any type: $e2');
           }
 
           // Last resort - any file type
-          result = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: false);
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.any,
+            allowMultiple: false,
+          );
         }
       }
 
       if (kDebugMode) {
-        print('File picker result: ${result != null ? "Selected" : "Cancelled"}');
+        print(
+          'File picker result: ${result != null ? "Selected" : "Cancelled"}',
+        );
       }
 
       if (result != null && result.files.isNotEmpty) {
@@ -116,7 +129,15 @@ class FilePickerWidget extends StatelessWidget {
 
         // Validate file extension for audio files
         final extension = selectedPath.split('.').last.toLowerCase();
-        final allowedExtensions = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'mp4', 'flac'];
+        final allowedExtensions = [
+          'mp3',
+          'wav',
+          'ogg',
+          'm4a',
+          'aac',
+          'mp4',
+          'flac',
+        ];
 
         if (!allowedExtensions.contains(extension)) {
           if (kDebugMode) {
@@ -147,9 +168,12 @@ class FilePickerWidget extends StatelessWidget {
             await AudioService.getAudioInfo(appState);
 
             // Initialize trim end time to audio duration
-            if (appState.audioInfo != null && appState.audioInfo!.durationMs != null) {
+            if (appState.audioInfo != null &&
+                appState.audioInfo!.durationMs != null) {
               if (kDebugMode) {
-                print('Setting trim end time to: ${appState.audioInfo!.durationMs} ms');
+                print(
+                  'Setting trim end time to: ${appState.audioInfo!.durationMs} ms',
+                );
               }
 
               appState.trimEndMs = appState.audioInfo!.durationMs!;
@@ -214,7 +238,10 @@ class FilePickerWidget extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
               ),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
@@ -233,7 +260,10 @@ class FilePickerWidget extends StatelessWidget {
             const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 8),
-            const Text('Or process from Network URL:', style: TextStyle(fontWeight: FontWeight.w500)),
+            const Text(
+              'Or process from Network URL:',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: appState.urlController,
@@ -251,7 +281,9 @@ class FilePickerWidget extends StatelessWidget {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed:
-                        (appState.isDownloading || appState.isExtracting || appState.urlController.text.trim().isEmpty)
+                        (appState.isDownloading ||
+                                appState.isExtracting ||
+                                appState.urlController.text.trim().isEmpty)
                             ? null
                             : _processUrlFile,
                     icon: const Icon(Icons.cloud_download),
@@ -262,7 +294,8 @@ class FilePickerWidget extends StatelessWidget {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed:
-                        (appState.isExtracting || appState.urlController.text.trim().isEmpty)
+                        (appState.isExtracting ||
+                                appState.urlController.text.trim().isEmpty)
                             ? null
                             : _generateFakeWaveformFromUrl,
                     icon: const Icon(Icons.auto_fix_high),
@@ -280,7 +313,9 @@ class FilePickerWidget extends StatelessWidget {
               const SizedBox(height: 16),
               LinearProgressIndicator(value: appState.downloadProgress),
               const SizedBox(height: 8),
-              Text('Downloading: ${(appState.downloadProgress * 100).toStringAsFixed(1)}%'),
+              Text(
+                'Downloading: ${(appState.downloadProgress * 100).toStringAsFixed(1)}%',
+              ),
             ],
           ],
         ),

@@ -12,7 +12,12 @@ abstract class FlutterAudioToolkitException implements Exception {
   /// Original error from the platform (if any)
   final dynamic originalError;
 
-  const FlutterAudioToolkitException(this.message, {this.details, this.code, this.originalError});
+  const FlutterAudioToolkitException(
+    this.message, {
+    this.details,
+    this.code,
+    this.originalError,
+  });
 
   @override
   String toString() {
@@ -98,7 +103,13 @@ class AudioAnalysisException extends FlutterAudioToolkitException {
   /// Input file path
   final String? inputPath;
 
-  const AudioAnalysisException(super.message, {super.details, super.code, super.originalError, this.inputPath});
+  const AudioAnalysisException(
+    super.message, {
+    super.details,
+    super.code,
+    super.originalError,
+    this.inputPath,
+  });
 }
 
 /// Exception thrown when noise analysis fails

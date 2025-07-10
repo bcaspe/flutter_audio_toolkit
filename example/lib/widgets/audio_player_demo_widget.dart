@@ -16,7 +16,8 @@ class AudioPlayerDemoWidget extends StatefulWidget {
   State<AudioPlayerDemoWidget> createState() => _AudioPlayerDemoWidgetState();
 }
 
-class _AudioPlayerDemoWidgetState extends State<AudioPlayerDemoWidget> with SingleTickerProviderStateMixin {
+class _AudioPlayerDemoWidgetState extends State<AudioPlayerDemoWidget>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
@@ -41,12 +42,16 @@ class _AudioPlayerDemoWidgetState extends State<AudioPlayerDemoWidget> with Sing
   @override
   Widget build(BuildContext context) {
     // Determine which file to play (selected, converted, or trimmed)
-    String? fileToPlay = widget.appState.currentPlayingFile ?? widget.appState.selectedFilePath;
+    String? fileToPlay =
+        widget.appState.currentPlayingFile ?? widget.appState.selectedFilePath;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('Audio Player Demo', style: TextStyle(fontWeight: FontWeight.bold)),
+        const Text(
+          'Audio Player Demo',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 8),
 
         // File selection info
@@ -58,11 +63,20 @@ class _AudioPlayerDemoWidgetState extends State<AudioPlayerDemoWidget> with Sing
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Playing: ${fileToPlay.split('/').last}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    'Playing: ${fileToPlay.split('/').last}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   if (fileToPlay == widget.appState.convertedFilePath)
-                    const Text('(Converted file)', style: TextStyle(fontStyle: FontStyle.italic)),
+                    const Text(
+                      '(Converted file)',
+                      style: TextStyle(fontStyle: FontStyle.italic),
+                    ),
                   if (fileToPlay == widget.appState.trimmedFilePath)
-                    const Text('(Trimmed file)', style: TextStyle(fontStyle: FontStyle.italic)),
+                    const Text(
+                      '(Trimmed file)',
+                      style: TextStyle(fontStyle: FontStyle.italic),
+                    ),
                 ],
               ),
             ),
@@ -87,7 +101,10 @@ class _AudioPlayerDemoWidgetState extends State<AudioPlayerDemoWidget> with Sing
             children: [
               // True Waveform Player Tab
               fileToPlay != null && widget.appState.waveformData != null
-                  ? TrueWaveformPlayerWidget(audioPath: fileToPlay, waveformData: widget.appState.waveformData!)
+                  ? TrueWaveformPlayerWidget(
+                    audioPath: fileToPlay,
+                    waveformData: widget.appState.waveformData!,
+                  )
                   : TrueWaveformPlayerWidget.placeholder(context),
 
               // Fake Waveform Player Tab
@@ -99,7 +116,8 @@ class _AudioPlayerDemoWidgetState extends State<AudioPlayerDemoWidget> with Sing
               fileToPlay != null
                   ? CustomFakeWaveformPlayer(
                     audioPath: fileToPlay,
-                    waveformData: null, // Let the custom player generate its own waveform
+                    waveformData:
+                        null, // Let the custom player generate its own waveform
                   )
                   : CustomFakeWaveformPlayer.placeholder(context),
 

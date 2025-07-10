@@ -9,7 +9,11 @@ class WaveformWidget extends StatelessWidget {
   final AppState appState;
   final VoidCallback onStateChanged;
 
-  const WaveformWidget({super.key, required this.appState, required this.onStateChanged});
+  const WaveformWidget({
+    super.key,
+    required this.appState,
+    required this.onStateChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,13 +27,18 @@ class WaveformWidget extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Waveform Extraction', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text(
+                  'Waveform Extraction',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 16),
 
                 // Fake waveform mode toggle
                 CheckboxListTile(
                   title: const Text('Use Fake Waveform'),
-                  subtitle: const Text('Generate synthetic waveform instead of extracting from audio'),
+                  subtitle: const Text(
+                    'Generate synthetic waveform instead of extracting from audio',
+                  ),
                   value: appState.isFakeWaveformMode,
                   onChanged: (bool? value) {
                     appState.isFakeWaveformMode = value ?? false;
@@ -60,10 +69,16 @@ class WaveformWidget extends StatelessWidget {
                             }
                           },
                           items:
-                              WaveformPattern.values.map((WaveformPattern pattern) {
+                              WaveformPattern.values.map((
+                                WaveformPattern pattern,
+                              ) {
                                 return DropdownMenuItem<WaveformPattern>(
                                   value: pattern,
-                                  child: Text(PatternHelper.getPatternDescription(pattern)),
+                                  child: Text(
+                                    PatternHelper.getPatternDescription(
+                                      pattern,
+                                    ),
+                                  ),
                                 );
                               }).toList(),
                         ),
@@ -72,8 +87,12 @@ class WaveformWidget extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   ElevatedButton(
-                    onPressed: appState.isExtracting ? null : _generateFakeWaveform,
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                    onPressed:
+                        appState.isExtracting ? null : _generateFakeWaveform,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
                     child: const Text('Generate Fake Waveform'),
                   ),
                 ] else ...[
@@ -107,20 +126,37 @@ class WaveformWidget extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Waveform Data', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Waveform Data',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: appState.isFakeWaveformMode ? Colors.orange.shade50 : Colors.green.shade50,
-                      border: Border.all(color: appState.isFakeWaveformMode ? Colors.orange : Colors.green, width: 1),
+                      color:
+                          appState.isFakeWaveformMode
+                              ? Colors.orange.shade50
+                              : Colors.green.shade50,
+                      border: Border.all(
+                        color:
+                            appState.isFakeWaveformMode
+                                ? Colors.orange
+                                : Colors.green,
+                        width: 1,
+                      ),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Row(
                       children: [
                         Icon(
-                          appState.isFakeWaveformMode ? Icons.auto_fix_high : Icons.graphic_eq,
-                          color: appState.isFakeWaveformMode ? Colors.orange : Colors.green,
+                          appState.isFakeWaveformMode
+                              ? Icons.auto_fix_high
+                              : Icons.graphic_eq,
+                          color:
+                              appState.isFakeWaveformMode
+                                  ? Colors.orange
+                                  : Colors.green,
                           size: 16,
                         ),
                         const SizedBox(width: 8),
@@ -130,7 +166,10 @@ class WaveformWidget extends StatelessWidget {
                               : 'Real Waveform Data',
                           style: TextStyle(
                             fontWeight: FontWeight.w500,
-                            color: appState.isFakeWaveformMode ? Colors.orange.shade800 : Colors.green.shade800,
+                            color:
+                                appState.isFakeWaveformMode
+                                    ? Colors.orange.shade800
+                                    : Colors.green.shade800,
                           ),
                         ),
                       ],
@@ -138,7 +177,9 @@ class WaveformWidget extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text('Samples: ${appState.waveformData!.amplitudes.length}'),
-                  Text('Duration: ${(appState.waveformData!.durationMs / 1000).toStringAsFixed(2)}s'),
+                  Text(
+                    'Duration: ${(appState.waveformData!.durationMs / 1000).toStringAsFixed(2)}s',
+                  ),
                   Text('Sample Rate: ${appState.waveformData!.sampleRate} Hz'),
                   Text('Channels: ${appState.waveformData!.channels}'),
                   const SizedBox(height: 16),
@@ -154,10 +195,15 @@ class WaveformWidget extends StatelessWidget {
                         config: WaveformVisualizationConfig(
                           height: 100,
                           interactive: true,
-                          style: const WaveformStyle(primaryColor: Colors.blue, lineWidth: 2.0),
+                          style: const WaveformStyle(
+                            primaryColor: Colors.blue,
+                            lineWidth: 2.0,
+                          ),
                         ),
                         currentPosition: Duration.zero,
-                        duration: Duration(milliseconds: appState.waveformData!.durationMs),
+                        duration: Duration(
+                          milliseconds: appState.waveformData!.durationMs,
+                        ),
                       ),
                       size: const Size.fromHeight(100),
                     ),

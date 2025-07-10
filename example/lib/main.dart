@@ -30,7 +30,10 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Flutter Audio Toolkit Demo',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: ChangeNotifierProvider(create: (context) => AppState(), child: const AudioToolkitHome()),
+      home: ChangeNotifierProvider(
+        create: (context) => AppState(),
+        child: const AudioToolkitHome(),
+      ),
     );
   }
 }
@@ -89,7 +92,9 @@ class _AudioToolkitHomeState extends State<AudioToolkitHome> {
 
     if (Platform.isAndroid) {
       if (kDebugMode) {
-        print('Android platform detected - requesting comprehensive permissions');
+        print(
+          'Android platform detected - requesting comprehensive permissions',
+        );
       }
 
       try {
@@ -140,15 +145,20 @@ class _AudioToolkitHomeState extends State<AudioToolkitHome> {
         }
 
         // If critical permissions are denied, show user guidance
-        if (audioStatus.isPermanentlyDenied || storageStatus.isPermanentlyDenied) {
+        if (audioStatus.isPermanentlyDenied ||
+            storageStatus.isPermanentlyDenied) {
           if (kDebugMode) {
-            print('Some permissions permanently denied - user should check app settings');
+            print(
+              'Some permissions permanently denied - user should check app settings',
+            );
           }
         }
       } catch (e) {
         if (kDebugMode) {
           print('Error requesting permissions: $e');
-          print('Continuing with app initialization - some features may be limited');
+          print(
+            'Continuing with app initialization - some features may be limited',
+          );
         }
       }
     } else if (Platform.isIOS) {
@@ -171,11 +181,10 @@ class _AudioToolkitHomeState extends State<AudioToolkitHome> {
     }
 
     try {
-      final platformVersion = await AudioService.getPlatformVersion(appState);
-      appState.platformVersion = platformVersion;
+      await AudioService.getPlatformVersion(appState);
 
       if (kDebugMode) {
-        print('Platform version: $platformVersion');
+        print('Platform version: ${appState.platformVersion}');
       }
     } on PlatformException catch (e) {
       if (kDebugMode) {
@@ -192,9 +201,13 @@ class _AudioToolkitHomeState extends State<AudioToolkitHome> {
       print('ERROR: $message');
     }
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red, duration: const Duration(seconds: 3)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   void _onStateChanged() {
@@ -208,14 +221,20 @@ class _AudioToolkitHomeState extends State<AudioToolkitHome> {
     return Consumer<AppState>(
       builder: (context, appState, child) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Audio Converter & Waveform'), backgroundColor: Colors.blue),
+          appBar: AppBar(
+            title: const Text('Audio Converter & Waveform'),
+            backgroundColor: Colors.blue,
+          ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // File Picker and URL Input Section
-                FilePickerWidget(appState: appState, onError: () => _showError('Failed to select or process file')),
+                FilePickerWidget(
+                  appState: appState,
+                  onError: () => _showError('Failed to select or process file'),
+                ),
 
                 // Audio Information Section
                 AudioInfoWidget(appState: appState),
@@ -223,7 +242,10 @@ class _AudioToolkitHomeState extends State<AudioToolkitHome> {
                 // Audio Conversion Section
                 if (appState.selectedFilePath != null) ...[
                   const SizedBox(height: 16),
-                  ConversionWidget(appState: appState, onStateChanged: _onStateChanged),
+                  ConversionWidget(
+                    appState: appState,
+                    onStateChanged: _onStateChanged,
+                  ),
 
                   // Waveform Extraction Section
                   const SizedBox(height: 16),

@@ -271,7 +271,11 @@ class FlutterAudioToolkit {
   /// [url] - URL of the audio file to download
   /// [outputPath] - Local path where the downloaded file will be saved
   /// [onProgress] - Optional callback for download progress
-  Future<String> downloadFile(String url, String outputPath, {ProgressCallback? onProgress}) {
+  Future<String> downloadFile(
+    String url,
+    String outputPath, {
+    ProgressCallback? onProgress,
+  }) {
     return AudioService.downloadFile(url, outputPath, onProgress: onProgress);
   }
 
@@ -297,7 +301,11 @@ class FlutterAudioToolkit {
     required String localPath,
     ProgressCallback? onProgress,
   }) {
-    return AudioService.extractMetadataFromUrl(url: url, localPath: localPath, onProgress: onProgress);
+    return AudioService.extractMetadataFromUrl(
+      url: url,
+      localPath: localPath,
+      onProgress: onProgress,
+    );
   }
 
   /// Analyzes an audio file for noise detection and quality assessment
@@ -373,7 +381,11 @@ class FlutterAudioToolkit {
       onDownloadProgress: onDownloadProgress,
     );
 
-    return analyzeNoise(inputPath: audioPath, sensitivityLevel: sensitivityLevel, onProgress: onAnalysisProgress);
+    return analyzeNoise(
+      inputPath: audioPath,
+      sensitivityLevel: sensitivityLevel,
+      onProgress: onAnalysisProgress,
+    );
   }
 
   /// Downloads an audio file from a network URL
@@ -406,6 +418,8 @@ class FlutterAudioToolkit {
   /// Returns true if configuration was successful.
   Future<bool> configureAudioSession({Map<String, dynamic>? configuration}) {
     _ensureInitialized();
-    return FlutterAudioToolkitPlatform.instance.configureAudioSession(configuration: configuration);
+    return FlutterAudioToolkitPlatform.instance.configureAudioSession(
+      configuration: configuration,
+    );
   }
 }
