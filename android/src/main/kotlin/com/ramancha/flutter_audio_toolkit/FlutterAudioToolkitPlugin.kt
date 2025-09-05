@@ -73,11 +73,361 @@ class FlutterAudioToolkitPlugin: FlutterPlugin, MethodCallHandler {
             "trimAudio" -> {
                 handleTrimAudio(call, result)
             }
+            "spliceAudio" -> {
+                handleSpliceAudio(call, result)
+            }
             else -> {
                 result.notImplemented()
             }
         }
     }
+
+    private fun processRemainingEncoderOutput(
+    encoder: MediaCodec,
+    muxer: MediaMuxer,
+    audioTrackIndex: Int
+) {
+    val encoderBufferInfo = MediaCodec.BufferInfo()
+    
+    while (true) {
+        val encoderOutputIndex = encoder.dequeueOutputBuffer(encoderBufferInfo, 1000L)
+        when (encoderOutputIndex) {
+            MediaCodec.INFO_TRY_AGAIN_LATER -> {
+                break
+            }
+            else -> {
+                if (encoderOutputIndex >= 0) {
+                    val encodedData = encoder.getOutputBuffer(encoderOutputIndex)
+                    
+                    if (encoderBufferInfo.size > 0 && encodedData != null) {
+                        muxer.writeSampleData(audioTrackIndex, encodedData, encoderBufferInfo)
+                    }
+                    
+                    encoder.releaseOutputBuffer(encoderOutputIndex, false)
+                    
+                    if (encoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                        break
+                    }
+                }
+            }
+        }
+    }
+}
+
+    private fun spliceAudioDataFromFile(
+    extractor: MediaExtractor,
+    decoder: MediaCodec,
+    encoder: MediaCodec,
+    muxer: MediaMuxer,
+    inputFormat: MediaFormat,
+    timeOffsetUs: Long,
+    shouldStartMuxer: Boolean
+): Long {
+    val decoderBufferInfo = MediaCodec.BufferInfo()
+    val encoderBufferInfo = MediaCodec.BufferInfo()
+    
+    var decoderDone = false
+    var encoderDone = false
+    var encoderEOSSignaled = false
+    var muxerStarted = !shouldStartMuxer
+    var audioTrackIndex = -1
+    
+    var fileDurationUs = 0L
+    
+    while (!decoderDone) {
+        // Feed input to decoder
+        if (!decoderDone) {
+            val inputBufferIndex = decoder.dequeueInputBuffer(1000L)
+            if (inputBufferIndex >= 0) {
+                val inputBuffer = decoder.getInputBuffer(inputBufferIndex)
+                if (inputBuffer != null) {
+                    inputBuffer.clear()
+                    val sampleSize = extractor.readSampleData(inputBuffer, 0)
+                    
+                    if (sampleSize < 0) {
+                        decoder.queueInputBuffer(inputBufferIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                        decoderDone = true
+                    } else {
+                        val presentationTimeUs = extractor.sampleTime
+                        decoder.queueInputBuffer(inputBufferIndex, 0, sampleSize, presentationTimeUs, 0)
+                        extractor.advance()
+                        
+                        if (presentationTimeUs > fileDurationUs) {
+                            fileDurationUs = presentationTimeUs
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Get output from decoder and feed to encoder
+        val decoderOutputIndex = decoder.dequeueOutputBuffer(decoderBufferInfo, 1000L)
+        if (decoderOutputIndex >= 0) {
+            val decoderOutputBuffer = decoder.getOutputBuffer(decoderOutputIndex)
+            
+            if (decoderBufferInfo.size > 0 && decoderOutputBuffer != null) {
+                val encoderInputIndex = encoder.dequeueInputBuffer(5000L)
+                if (encoderInputIndex >= 0) {
+                    val encoderInputBuffer = encoder.getInputBuffer(encoderInputIndex)
+                    if (encoderInputBuffer != null) {
+                        encoderInputBuffer.clear()
+                        
+                        val dataSize = minOf(decoderBufferInfo.size, encoderInputBuffer.remaining())
+                        if (dataSize > 0) {
+                            decoderOutputBuffer.position(decoderBufferInfo.offset)
+                            decoderOutputBuffer.limit(decoderBufferInfo.offset + dataSize)
+                            encoderInputBuffer.put(decoderOutputBuffer)
+                        }
+                        
+                        // Adjust timestamp with offset
+                        val adjustedTimeUs = decoderBufferInfo.presentationTimeUs + timeOffsetUs
+                        
+                        encoder.queueInputBuffer(
+                            encoderInputIndex,
+                            0,
+                            dataSize,
+                            adjustedTimeUs,
+                            decoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv()
+                        )
+                    }
+                }
+            }
+            
+            decoder.releaseOutputBuffer(decoderOutputIndex, false)
+            
+            if (decoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                decoderDone = true
+            }
+        }
+        
+        // Get output from encoder
+        val encoderOutputIndex = encoder.dequeueOutputBuffer(encoderBufferInfo, 1000L)
+        when (encoderOutputIndex) {
+            MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                if (!muxerStarted) {
+                    val outputFormat = encoder.outputFormat
+                    audioTrackIndex = muxer.addTrack(outputFormat)
+                    muxer.start()
+                    muxerStarted = true
+                }
+            }
+            else -> {
+                if (encoderOutputIndex >= 0) {
+                    val encodedData = encoder.getOutputBuffer(encoderOutputIndex)
+                    
+                    if (encoderBufferInfo.size > 0 && muxerStarted && encodedData != null) {
+                        muxer.writeSampleData(audioTrackIndex, encodedData, encoderBufferInfo)
+                    }
+                    
+                    encoder.releaseOutputBuffer(encoderOutputIndex, false)
+                    
+                    if (encoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                        encoderDone = true
+                    }
+                }
+            }
+        }
+    }
+    
+    return fileDurationUs
+}
+
+private fun handleSpliceAudio(call: MethodCall, result: Result) {
+    val inputPaths = call.argument<List<String>>("inputPaths")
+    val outputPath = call.argument<String>("outputPath")
+    val format = call.argument<String>("format") ?: "m4a"
+    val bitRateKbps = call.argument<Int>("bitRate") ?: 128
+    val sampleRate = call.argument<Int>("sampleRate") ?: SAMPLE_RATE
+
+    if (inputPaths == null || outputPath == null || inputPaths.isEmpty()) {
+        result.error("INVALID_ARGUMENTS", "Missing required arguments", null)
+        return
+    }
+
+    GlobalScope.launch(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Starting audio splicing: ${inputPaths.size} files -> $outputPath")
+            val splicedData = spliceAudioFiles(inputPaths, outputPath, format, bitRateKbps * 1000, sampleRate)
+            Handler(Looper.getMainLooper()).post {
+                result.success(splicedData)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Audio splicing failed", e)
+            Handler(Looper.getMainLooper()).post {
+                result.error("SPLICE_ERROR", "Audio splicing failed: ${e.javaClass.simpleName} - ${e.message}", null)
+            }
+        }
+    }
+}
+
+    private suspend fun spliceAudioFiles(
+    inputPaths: List<String>,
+    outputPath: String,
+    format: String,
+    bitRate: Int,
+    sampleRate: Int
+): Map<String, Any?> = withContext(Dispatchers.IO) {
+    
+    Log.d(TAG, "Splicing ${inputPaths.size} audio files into: $outputPath")
+    
+    val extractor = MediaExtractor()
+    var decoder: MediaCodec? = null
+    var encoder: MediaCodec? = null
+    var muxer: MediaMuxer? = null
+    
+    try {
+        // Ensure output directory exists
+        File(outputPath).parentFile?.mkdirs()
+        
+        // Setup muxer
+        muxer = MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        
+        var audioTrackIndex = -1
+        var muxerStarted = false
+        var totalDurationUs = 0L
+        var currentTimeOffsetUs = 0L
+        
+        // Process each input file
+        for ((fileIndex, inputPath) in inputPaths.withIndex()) {
+            Log.d(TAG, "Processing file $fileIndex: $inputPath")
+            
+            // Setup extractor for current file
+            extractor.setDataSource(inputPath)
+            
+            // Find audio track
+            var currentAudioTrackIndex = -1
+            var inputFormat: MediaFormat? = null
+            
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME)
+                if (mime?.startsWith("audio/") == true) {
+                    currentAudioTrackIndex = i
+                    inputFormat = format
+                    break
+                }
+            }
+            
+            if (currentAudioTrackIndex == -1 || inputFormat == null) {
+                Log.w(TAG, "No audio track found in file: $inputPath")
+                continue
+            }
+            
+            extractor.selectTrack(currentAudioTrackIndex)
+            
+            // Setup decoder for first file or if format changed
+            if (decoder == null) {
+                val inputMime = inputFormat.getString(MediaFormat.KEY_MIME)!!
+                decoder = MediaCodec.createDecoderByType(inputMime)
+                decoder.configure(inputFormat, null, null, 0)
+                decoder.start()
+                
+                // Setup encoder
+                val outputMime = "audio/mp4a-latm"
+                encoder = MediaCodec.createEncoderByType(outputMime)
+                
+                val inputChannels = inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                val inputSampleRate = if (inputFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                    inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                } else {
+                    sampleRate
+                }
+                
+                val outputChannels = if (inputChannels in 1..2) inputChannels else 2
+                val outputSampleRate = if (inputSampleRate in 8000..48000) inputSampleRate else sampleRate
+                
+                val encoderFormat = MediaFormat.createAudioFormat(outputMime, outputSampleRate, outputChannels).apply {
+                    setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
+                    setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+                    setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 65536)
+                    setInteger(MediaFormat.KEY_CHANNEL_MASK, 
+                        if (outputChannels == 1) AudioFormat.CHANNEL_OUT_MONO 
+                        else AudioFormat.CHANNEL_OUT_STEREO)
+                }
+                
+                encoder.configure(encoderFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                encoder.start()
+            }
+            
+            // Process audio data from current file
+            val fileDurationUs = spliceAudioDataFromFile(
+                extractor, decoder, encoder, muxer, 
+                inputFormat, currentTimeOffsetUs, !muxerStarted
+            )
+            
+            totalDurationUs += fileDurationUs
+            currentTimeOffsetUs = totalDurationUs
+            
+            // Reset extractor for next file
+            extractor.release()
+            extractor = MediaExtractor()
+            
+            // Report progress
+            val progress = (fileIndex + 1).toDouble() / inputPaths.size.toDouble()
+            Handler(Looper.getMainLooper()).post {
+                progressSink?.success(mapOf("operation" to "splice", "progress" to progress))
+            }
+        }
+        
+        // Signal EOS to encoder
+        if (encoder != null) {
+            val encoderInputIndex = encoder.dequeueInputBuffer(5000L)
+            if (encoderInputIndex >= 0) {
+                encoder.queueInputBuffer(encoderInputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+            }
+        }
+        
+        // Process remaining encoder output
+        if (encoder != null && muxer != null) {
+            processRemainingEncoderOutput(encoder, muxer, audioTrackIndex)
+        }
+        
+        Log.d(TAG, "Audio splicing completed successfully")
+        
+        mapOf(
+            "outputPath" to outputPath,
+            "durationMs" to (totalDurationUs / 1000).toInt(),
+            "bitRate" to (bitRate / 1000),
+            "sampleRate" to sampleRate,
+            "filesProcessed" to inputPaths.size
+        )
+        
+    } finally {
+        // Cleanup resources
+        decoder?.let {
+            try {
+                it.stop()
+                it.release()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error releasing decoder", e)
+            }
+        }
+        
+        encoder?.let {
+            try {
+                it.stop()
+                it.release()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error releasing encoder", e)
+            }
+        }
+        
+        muxer?.let {
+            try {
+                it.stop()
+                it.release()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error releasing muxer", e)
+            }
+        }
+        
+        try {
+            extractor.release()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error releasing extractor", e)
+        }
+    }
+}
 
     private fun handleConvertAudio(call: MethodCall, result: Result) {
         val inputPath = call.argument<String>("inputPath")
