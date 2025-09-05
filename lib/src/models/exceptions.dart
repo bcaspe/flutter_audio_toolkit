@@ -191,3 +191,34 @@ class InvalidArgumentsException extends FlutterAudioToolkitException {
     this.actualValue,
   });
 }
+
+/// Exception thrown when audio splicing operations fail
+class AudioSplicingException extends FlutterAudioToolkitException {
+  /// List of input file paths that were being spliced
+  final List<String> inputPaths;
+  
+  /// Output path where the spliced file was to be saved
+  final String outputPath;
+
+  AudioSplicingException(
+    String message, {
+    this.inputPaths = const [],
+    this.outputPath = '',
+    String? details,
+    String? code,
+    dynamic originalError,
+  }) : super(
+          message,
+          details: details,
+          code: code,
+          originalError: originalError,
+        );
+
+  @override
+  String toString() {
+    return 'AudioSplicingException: $message\n'
+        'Input paths: ${inputPaths.join(', ')}\n'
+        'Output path: $outputPath\n'
+        '${details != null ? 'Details: $details' : ''}';
+  }
+}
