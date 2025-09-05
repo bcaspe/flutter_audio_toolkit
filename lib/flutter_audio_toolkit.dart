@@ -41,6 +41,40 @@ class FlutterAudioToolkit {
     return FlutterAudioToolkitPlatform.instance.getPlatformVersion();
   }
 
+  /// Splices multiple audio files into a single output file
+///
+/// Combines multiple audio files sequentially into one continuous audio file.
+/// All input files are processed and concatenated with proper timestamp adjustment
+/// to ensure seamless playback without gaps or overlaps.
+///
+/// [inputPaths] - List of paths to input audio files to splice together
+/// [outputPath] - Path where the spliced file will be saved
+/// [format] - Target audio format (M4A recommended for universal compatibility)
+/// [bitRate] - Target bit rate in kbps (default: 128)
+/// [sampleRate] - Target sample rate in Hz (default: 44100)
+/// [onProgress] - Optional callback for splicing progress
+///
+/// M4A format with AAC codec provides optimal cross-platform compatibility
+/// and high-quality audio with excellent compression for spliced content.
+Future<ConversionResult> spliceAudio({
+  required List<String> inputPaths,
+  required String outputPath,
+  required AudioFormat format,
+  int bitRate = 128,
+  int sampleRate = 44100,
+  ProgressCallback? onProgress,
+}) {
+  _ensureInitialized();
+  return FlutterAudioToolkitPlatform.instance.spliceAudio(
+    inputPaths: inputPaths,
+    outputPath: outputPath,
+    format: format,
+    bitRate: bitRate,
+    sampleRate: sampleRate,
+    onProgress: onProgress,
+  );
+}
+
   /// Converts an audio file to M4A format with AAC codec
   ///
   /// [inputPath] - Path to the input audio file (mp3, wav, ogg)
