@@ -735,6 +735,9 @@ Future<ConversionResult> spliceAudio({
       case 'WAVEFORM_ERROR':
         message = 'Waveform extraction failed: $message';
         break;
+      case 'SPLICE_ERROR':
+        message = 'Audio splicing failed: $message';
+        break;
       case 'INFO_ERROR':
         message = 'Audio information retrieval failed: $message';
         break;
