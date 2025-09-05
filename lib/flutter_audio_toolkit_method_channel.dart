@@ -112,6 +112,102 @@ class MethodChannelFlutterAudioToolkit extends FlutterAudioToolkitPlatform {
   }
 
   @override
+Future<ConversionResult> spliceAudio({
+  required List<String> inputPaths,
+  required String outputPath,
+  required AudioFormat format,
+  int bitRate = 128,
+  int sampleRate = 44100,
+  ProgressCallback? onProgress,
+}) async {
+  // Validate arguments
+  if (inputPaths.isEmpty) {
+    throw InvalidArgumentsException(
+      'Input paths list cannot be empty',
+      parameterName: 'inputPaths',
+      expectedValue: 'non-empty list',
+      actualValue: inputPaths,
+    );
+  }
+  
+  for (int i = 0; i < inputPaths.length; i++) {
+    _validateFilePath(inputPaths[i], 'inputPaths[$i]');
+  }
+  
+  _validateFilePath(outputPath, 'outputPath');
+  _validateBitRate(bitRate);
+  _validateSampleRate(sampleRate);
+
+  // Set up progress listening
+  StreamSubscription<dynamic>? progressSub;
+  if (onProgress != null) {
+    progressSub = _progressChannel.receiveBroadcastStream().listen((data) {
+      if (data is Map && data['operation'] == 'splice') {
+        final progress = data['progress'] as double?;
+        if (progress != null) {
+          onProgress(progress);
+        }
+      }
+    });
+  }
+
+  try {
+    final Map<String, dynamic> arguments = {
+      'inputPaths': inputPaths,
+      'outputPath': outputPath,
+      'format': format.name,
+      'bitRate': bitRate,
+      'sampleRate': sampleRate,
+    };
+
+    final result = await methodChannel
+        .invokeMethod('spliceAudio', arguments)
+        .timeout(const Duration(minutes: 15));
+
+    if (result == null) {
+      throw AudioSplicingException(
+        'Audio splicing failed: No result returned from platform',
+        inputPaths: inputPaths,
+        outputPath: outputPath,
+      );
+    }
+
+    // Safely convert the result to Map<String, dynamic>
+    final Map<String, dynamic> convertedResult;
+    if (result is Map) {
+      convertedResult = Map<String, dynamic>.from(result);
+    } else {
+      throw AudioSplicingException(
+        'Audio splicing failed: Invalid result type from platform',
+        inputPaths: inputPaths,
+        outputPath: outputPath,
+      );
+    }
+
+    return ConversionResult(
+      outputPath: convertedResult['outputPath'] as String,
+      durationMs: convertedResult['durationMs'] as int,
+      bitRate: convertedResult['bitRate'] as int,
+      sampleRate: convertedResult['sampleRate'] as int,
+    );
+  } on PlatformException catch (e) {
+    throw _convertPlatformException(e, AudioSplicingException.new, {
+      'inputPaths': inputPaths,
+      'outputPath': outputPath,
+    });
+  } catch (e) {
+    throw AudioSplicingException(
+      'Audio splicing failed: $e',
+      originalError: e,
+      inputPaths: inputPaths,
+      outputPath: outputPath,
+    );
+  } finally {
+    await progressSub?.cancel();
+  }
+}
+
+  @override
   Future<ConversionResult> trimAudio({
     required String inputPath,
     required String outputPath,
