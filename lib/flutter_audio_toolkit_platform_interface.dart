@@ -41,6 +41,32 @@ abstract class FlutterAudioToolkitPlatform extends PlatformInterface {
     throw UnimplementedError('getPlatformVersion() has not been implemented.');
   }
 
+  /// Splices multiple audio files into a single output file
+///
+/// Combines multiple audio files sequentially into one continuous audio file.
+/// All input files are processed and concatenated with proper timestamp adjustment
+/// to ensure seamless playback.
+///
+/// [inputPaths] - List of paths to input audio files to splice together
+/// [outputPath] - Path where the spliced file will be saved
+/// [format] - Target audio format (see [AudioFormat])
+/// [bitRate] - Target bit rate in kbps (default: 128)
+/// [sampleRate] - Target sample rate in Hz (default: 44100)
+/// [onProgress] - Optional callback for splicing progress (0.0 to 1.0)
+///
+/// Returns [ConversionResult] with spliced file information.
+/// Throws [AudioSplicingException] if splicing fails.
+Future<ConversionResult> spliceAudio({
+  required List<String> inputPaths,
+  required String outputPath,
+  required AudioFormat format,
+  int bitRate = 128,
+  int sampleRate = 44100,
+  ProgressCallback? onProgress,
+}) {
+  throw UnimplementedError('spliceAudio() has not been implemented.');
+}
+
   // Audio Conversion
   /// Converts an audio file to the specified format
   ///
